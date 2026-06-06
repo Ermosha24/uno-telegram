@@ -86,7 +86,7 @@ let timerSeconds = 30;
 let chatUnsubscribe = null;
 let myStats = JSON.parse(localStorage.getItem('uno-stats') || '{"xp":0,"games":0,"wins":0}');
 
-let myProfile = JSON.parse(localStorage.getItem('uno-profile') || '{"name":"","avatar":"🐸","elo":1000,"xp":0,"wins":0,"losses":0,"streak":0,"lastBonus":0,"coins":100}');
+let myProfile = JSON.parse(localStorage.getItem('uno-profile') || '{"name":"","avatar":"🐸","xp":0,"wins":0,"losses":0,"streak":0,"lastBonus":0,"coins":100}');
 if (myProfile.coins === undefined) myProfile.coins = 100;
 
 function loadProfile() {
@@ -103,15 +103,13 @@ function updateProfileUI() {
   const xpEl = document.getElementById('xp-bar');
   const txtEl = document.getElementById('xp-text');
   if (xpEl) xpEl.style.width = pct + '%';
-  if (txtEl) txtEl.textContent = (lang==='ru'?'Ур. ':'Lv. ') + lvl + ' · ' + myProfile.xp + ' XP · ⭐ ' + myProfile.elo;
+  if (txtEl) txtEl.textContent = (lang==='ru'?'Ур. ':'Lv. ') + lvl + ' · ' + myProfile.xp + ' XP';
   const avEl = document.getElementById('prof-avatar');
   const nmEl = document.getElementById('prof-name');
-  const elEl = document.getElementById('prof-elo');
   const coinsEl = document.getElementById('prof-coins');
   const eqAv = getEquippedAvatar();
   if (avEl) avEl.textContent = eqAv || myProfile.avatar || '🐸';
   if (nmEl) nmEl.textContent = myProfile.name || (lang==='ru'?'Игрок':'Player');
-  if (elEl) elEl.textContent = '⭐ ' + myProfile.elo;
   if (coinsEl) coinsEl.textContent = myProfile.coins || 0;
 }
 function selAv(el) {
@@ -219,21 +217,6 @@ function showXpPopup(x) {
   el.style.display = 'block';
   setTimeout(() => el.style.display = 'none', 1200);
 }
-function updateElo(won, vsBot) {
-  let k = vsBot ? 10 : 25;
-  let eloChange = won ? k : -Math.floor(k / 2);
-  myProfile.elo = Math.max(100, myProfile.elo + eloChange);
-  if (won) myProfile.wins = (myProfile.wins || 0) + 1;
-  else myProfile.losses = (myProfile.losses || 0) + 1;
-  myProfile.xp = (myProfile.xp || 0) + (won ? 50 : 10);
-  let coinChange = won ? (vsBot ? 10 : 25) : -5;
-  myProfile.coins = (myProfile.coins || 0) + coinChange;
-  if (myProfile.coins < 0) myProfile.coins = 0;
-  localStorage.setItem('uno-profile', JSON.stringify(myProfile));
-  updateProfileUI();
-  return {eloChange: eloChange, coinChange: coinChange};
-}
-
 let savedRoom = localStorage.getItem('uno-saved-room');
 
 let isBotGame = false;
@@ -1052,15 +1035,13 @@ function showEnd(state) {
   if (!state) { showScreen('end'); return; }
   const won = state.winner === myRole;
   const vsBot = state.isBot || (state.guest && state.guest.name === t('bot'));
-  const ch = updateElo(won, vsBot);
-  document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
+    document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
   document.getElementById('end-title').textContent = won ? t('win') : t('lose');
   document.getElementById('end-sub').textContent = won ? t('winSub') : t('loseSub');
   // Добавим статистику
   const statsEl = document.getElementById('end-stats');
   if (statsEl) {
     statsEl.innerHTML = '<div style="font-size:1.1rem;font-weight:700;margin-bottom:8px;">' + (won ? (lang==='ru'?'Победа!':'Victory!') : (lang==='ru'?'Поражение':'Defeat')) + '</div>' +
-      '<div>⭐ ELO: ' + (ch > 0 ? '+' : '') + ch + ' (' + myProfile.elo + ')</div>' +
       '<div>XP: ' + myProfile.xp + ' | ' + (lang==='ru'?'Побед':'Wins') + ': ' + myProfile.wins + '</div>';
   }
   showScreen('end');
@@ -1134,12 +1115,11 @@ const ACHIEVEMENTS = [
   {id:'stacker', name:'Стопкер', desc:'Сыграйте +4 на +4', icon:'🥞', check:(s)=>s.stackedPlus4},
   {id:'pure_skill', name:'Чистая техника', desc:'Победите без Wild-карт', icon:'🎯', check:(s)=>s.noWildWin},
   {id:'veteran', name:'Ветеран', desc:'Сыграйте 10 партий', icon:'🎖️', check:(s)=>s.games>=10},
-  {id:'elo_1500', name:'Элита', desc:'Достигните 1500 ELO', icon:'💎', check:(s)=>s.elo>=1500},
   {id:'comeback', name:'Камбэк', desc:'Победите с 1 картой у соперника', icon:'🔥', check:(s)=>s.comebackWin}
 ];
 
 function getAchStats(){
-  return JSON.parse(localStorage.getItem('uno-ach-stats') || '{"games":0,"wins":0,"losses":0,"streak":0,"bestStreak":0,"fastestWin":99,"stackedPlus4":false,"noWildWin":false,"comebackWin":false,"elo":1000,"achievements":[],"usedWildInLastGame":false,"turnsInLastGame":0,"opponentCardsInLastGame":0}');
+  return JSON.parse(localStorage.getItem('uno-ach-stats') || '{"games":0,"wins":0,"losses":0,"streak":0,"bestStreak":0,"fastestWin":99,"stackedPlus4":false,"noWildWin":false,"comebackWin":false,"achievements":[],"usedWildInLastGame":false,"turnsInLastGame":0,"opponentCardsInLastGame":0}');
 }
 function saveAchStats(s){localStorage.setItem('uno-ach-stats',JSON.stringify(s));}
 
@@ -1200,7 +1180,6 @@ function recordGameForAchievements(won, turns, usedWild, opponentCards, isPlus4S
     s.losses++; s.streak = 0;
   }
   if(isPlus4Stack) s.stackedPlus4 = true;
-  s.elo = myProfile.elo || 1000;
   checkAchievements(s);
   saveAchStats(s);
 }
@@ -1220,7 +1199,6 @@ function initOnlineStatus() {
   playerRef.set({
     name: myProfile.name,
     avatar: myProfile.avatar || '🐸',
-    elo: myProfile.elo || 1000,
     status: 'online',
     lastSeen: firebase.database.ServerValue.TIMESTAMP
   });
@@ -1274,7 +1252,7 @@ function renderPlayers(players) {
   players.sort((a, b) => {
     if (a.status === 'online' && b.status !== 'online') return -1;
     if (b.status === 'online' && a.status !== 'online') return 1;
-    return (b.elo || 0) - (a.elo || 0);
+    return 0;
   });
   players.forEach(p => {
     if (p.id === myPlayerId) return;
@@ -1287,7 +1265,7 @@ function renderPlayers(players) {
       <div class="player-avatar">${p.avatar || '🐸'}</div>
       <div class="player-info">
         <div class="player-name">${p.name}</div>
-        <div class="player-meta">⭐ ${p.elo || 1000} · ${statusText}</div>
+        <div class="player-meta">${statusText}</div>
       </div>
       <div class="player-status ${statusClass}"></div>
       <button class="invite-btn" ${canInvite ? '' : 'disabled'} onclick="invitePlayer('${p.id}','${p.name}')">${lang === 'ru' ? 'Пригласить' : 'Invite'}</button>
@@ -2064,8 +2042,7 @@ function host4Game() {
       name: i === 0 ? myProfile.name : (t('bot') + ' ' + i),
       avatar: i === 0 ? myProfile.avatar : '🤖',
       hand: deck.splice(0, 7),
-      isBot: i !== 0,
-      elo: i === 0 ? myProfile.elo : 1000
+      isBot: i !== 0
     });
   }
   let topIdx = 0;
@@ -2361,7 +2338,6 @@ function checkWin4(state) {
 function showEnd4(state) {
   if (!state) { showScreen('end'); return; }
   const won = state.winner === myIndex4;
-  const ch = updateElo(won, true);
   document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
   document.getElementById('end-title').textContent = won ? t('win') : t('lose');
   document.getElementById('end-sub').textContent = won ? t('winSub') : t('loseSub');
@@ -2369,11 +2345,10 @@ function showEnd4(state) {
   const statsEl = document.getElementById('end-stats');
   if (statsEl) {
     const s = getAchStats();
-    const coinRow = `<div class="end-coins-row ${ch.coinChange > 0 ? 'positive' : 'negative'}">${ch.coinChange > 0 ? '+' : ''}${ch.coinChange} 🪙</div>`;
+    const coinRow = `<div class="end-coins-row ${won ? 'positive' : 'negative'}">${won ? '+' : ''}${won ? 10 : -5} 🪙</div>`;
     statsEl.innerHTML = `<div class="end-stats-box">
       <div class="stat-highlight">${won ? (lang==='ru'?'Победа!':'Victory!') : (lang==='ru'?'Поражение':'Defeat')}</div>
-      <div class="stat-row">⭐ ELO: ${ch.eloChange>0?'+':''}${ch.eloChange} (${myProfile.elo})</div>
-      ${coinRow}
+            ${coinRow}
       <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
       <div class="stat-row">${lang==='ru'?'Серия побед':'Win streak'}: ${s.streak}</div>
       <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
@@ -2555,7 +2530,6 @@ function host22Game() {
       hand: deck.splice(0, 7),
       isBot: i !== 0,
       team: TEAMS[i],
-      elo: i === 0 ? myProfile.elo : 1000,
       out: false
     });
   }
@@ -2913,8 +2887,6 @@ function showEnd22(state) {
   const winningTeam = getWinningTeam(state);
   const myTeam = TEAMS[myIndex22];
   const won = winningTeam === myTeam;
-  const ch = updateElo(won, true);
-
   // Show team win popup
   const popup = document.getElementById('team-win-popup');
   const sub = document.getElementById('team-win-sub');
@@ -2938,12 +2910,11 @@ function showEnd22(state) {
   const statsEl = document.getElementById('end-stats');
   if (statsEl) {
     const s = getAchStats();
-    const coinRow = `<div class="end-coins-row ${ch.coinChange > 0 ? 'positive' : 'negative'}">${ch.coinChange > 0 ? '+' : ''}${ch.coinChange} 🪙</div>`;
+    const coinRow = `<div class="end-coins-row ${won ? 'positive' : 'negative'}">${won ? '+' : ''}${won ? 10 : -5} 🪙</div>`;
     statsEl.innerHTML = `<div class="end-stats-box">
       <div class="stat-highlight">${won ? (lang==='ru'?'Победа команды!':'Team victory!') : (lang==='ru'?'Поражение':'Defeat')}</div>
       <div class="stat-row">Команда: ${myTeam === 'red' ? 'Красные' : 'Синие'}</div>
-      <div class="stat-row">⭐ ELO: ${ch.eloChange>0?'+':''}${ch.eloChange} (${myProfile.elo})</div>
-      ${coinRow}
+            ${coinRow}
       <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
       <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
       <div class="stat-row" style="color:#F5B800;font-weight:700;">🪙 ${myProfile.coins || 0}</div>
@@ -4507,6 +4478,7 @@ body.theme-cyber{
 </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -4538,7 +4510,7 @@ body.theme-cyber{
   <span id="prof-avatar" style="font-size:26px;">🐸</span>
   <div style="display:flex;flex-direction:column;align-items:flex-start;">
     <div id="prof-name" style="font-size:13px;font-weight:700;">Игрок</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;"><div id="prof-elo" style="font-size:11px;color:#F5B800;font-weight:600;">⭐ 1000</div><div class="coins-wrap"><span class="coins-icon">🪙</span><span class="coins-value" id="prof-coins">100</span></div></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;"><div class="coins-wrap"><span class="coins-icon">🪙</span><span class="coins-value" id="prof-coins">100</span></div></div>
   </div>
 </div>
   <div class="subtitle" id="subtitle">Игра для двоих · Онлайн</div>
@@ -4826,225 +4798,7 @@ body.theme-cyber{
 
 <!-- XP Popup -->
 <div id="xp-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:linear-gradient(135deg,#667eea,#764ba2);padding:20px 40px;border-radius:20px;font-size:1.6rem;font-weight:900;z-index:120;display:none;box-shadow:0 10px 40px rgba(0,0,0,0.5);animation:xpIn 0.5s ease;">+XP</div>
-<style>@keyframes xpIn{from{transform:translate(-50%,-50%) scale(0);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
-/* Coins System */
-.coins-wrap{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:4px 10px;}
-.coins-icon{font-size:16px;}
-.coins-value{font-size:13px;font-weight:800;color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.3);}
-.coins-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:48px;font-weight:900;z-index:9999;pointer-events:none;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);text-shadow:0 4px 20px rgba(0,0,0,0.5);}
-.coins-popup.show{transform:translate(-50%,-50%) scale(1);}
-.coins-popup.positive{color:#F5B800;}
-.coins-popup.negative{color:#E83B3B;}
-.coins-popup.zero{color:rgba(255,255,255,0.5);}
-.coins-float{position:fixed;font-size:28px;font-weight:800;z-index:9998;pointer-events:none;transition:all 0.8s ease-out;}
-.end-coins-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:18px;font-weight:800;}
-.end-coins-row.positive{color:#F5B800;}
-.end-coins-row.negative{color:#E83B3B;}
 
-/* Achievements & Reactions */
-.ach-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
-.ach-btn:active{transform:scale(0.9);background:rgba(255,255,255,0.1);}
-.ach-panel{position:fixed;top:70px;right:14px;width:300px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
-.ach-panel.show{display:flex;}
-.ach-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
-.ach-item.unlocked{background:rgba(245,184,0,0.08);border-color:rgba(245,184,0,0.2);}
-.ach-icon{font-size:28px;filter:grayscale(1);transition:filter 0.3s;}
-.ach-item.unlocked .ach-icon{filter:grayscale(0);}
-.ach-info{flex:1;}
-.ach-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
-.ach-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
-.ach-popup{position:fixed;top:20%;left:50%;transform:translateX(-50%) scale(0);background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px 30px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.3);z-index:9999;font-family:system-ui,sans-serif;text-align:center;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);max-width:300px;pointer-events:none;}
-.ach-popup.show{transform:translateX(-50%) scale(1);}
-.ach-popup-icon{font-size:48px;margin-bottom:8px;}
-.ach-popup-title{font-size:18px;font-weight:bold;margin-bottom:4px;}
-.ach-popup-sub{font-size:13px;opacity:0.9;}
-.end-stats-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px 20px;margin:16px 0;text-align:center;backdrop-filter:blur(10px);}
-.end-stats-box .stat-row{font-size:14px;color:rgba(255,255,255,0.7);margin:4px 0;}
-.end-stats-box .stat-highlight{font-size:18px;font-weight:800;color:#F5B800;margin:8px 0;}
-
-/* Players Online */
-.players-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
-.players-btn:active{transform:scale(0.9);}
-.players-badge{position:absolute;top:-4px;right:-4px;background:#E83B3B;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(232,59,59,0.4);}
-.players-panel{position:fixed;top:70px;right:14px;width:300px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:8px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
-.players-panel.show{display:flex;}
-.players-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
-.players-count{font-size:12px;color:rgba(255,255,255,0.5);font-weight:600;}
-.player-row{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
-.player-row:hover{background:rgba(255,255,255,0.08);}
-.player-avatar{font-size:28px;}
-.player-info{flex:1;min-width:0;}
-.player-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.player-meta{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
-.player-status{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.player-status.online{background:#27A55A;box-shadow:0 0 8px rgba(39,165,90,0.6);}
-.player-status.offline{background:rgba(255,255,255,0.2);}
-.player-status.away{background:#F5B800;box-shadow:0 0 8px rgba(245,184,0,0.4);}
-.invite-btn{padding:6px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
-.invite-btn:active{transform:scale(0.95);}
-.invite-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
-
-/* Daily Quests */
-.quests-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
-.quests-btn:active{transform:scale(0.9);}
-.quests-badge{position:absolute;top:-4px;right:-4px;background:#27A55A;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(39,165,90,0.4);}
-.quests-panel{position:fixed;top:70px;right:14px;width:320px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
-.quests-panel.show{display:flex;}
-.quests-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
-.quests-refresh{font-size:11px;color:rgba(255,255,255,0.4);}
-.quest-item{display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;position:relative;overflow:hidden;}
-.quest-item.completed{background:rgba(39,165,90,0.08);border-color:rgba(39,165,90,0.2);}
-.quest-item.completed::after{content:'✓';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:18px;color:#27A55A;font-weight:800;}
-.quest-icon{font-size:24px;flex-shrink:0;}
-.quest-info{flex:1;}
-.quest-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
-.quest-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
-.quest-progress-bar{height:4px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:6px;overflow:hidden;}
-.quest-progress-fill{height:100%;background:linear-gradient(90deg,#F5B800,#ff6b6b);border-radius:4px;transition:width 0.5s;}
-.quest-reward{font-size:11px;color:#F5B800;font-weight:700;margin-top:4px;}
-.quest-claim-btn{padding:6px 14px;border-radius:10px;border:none;background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
-.quest-claim-btn:active{transform:scale(0.95);}
-.quest-claim-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
-
-/* Bot Difficulty */
-.bot-diff-row{display:flex;gap:8px;margin-top:10px;justify-content:center;}
-.bot-diff-btn{padding:8px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;}
-.bot-diff-btn:hover{background:rgba(255,255,255,0.08);}
-.bot-diff-btn.selected{background:linear-gradient(135deg,#7B68EE,#6a5acd);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(123,104,238,0.3);}
-.bot-diff-label{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px;}
-
-/* Shop */
-.shop-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
-.shop-btn:active{transform:scale(0.9);}
-.shop-badge{position:absolute;top:-4px;right:-4px;background:#F5B800;color:#0a0a1a;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(245,184,0,0.4);}
-.shop-panel{position:fixed;top:70px;right:14px;width:340px;max-height:75vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
-.shop-panel.show{display:flex;}
-.shop-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
-.shop-balance{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:10px;padding:4px 10px;}
-.shop-balance-icon{font-size:14px;}
-.shop-balance-value{font-size:12px;font-weight:800;color:#F5B800;}
-.shop-tabs{display:flex;gap:6px;margin-bottom:8px;}
-.shop-tab{flex:1;padding:8px 4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all 0.2s;}
-.shop-tab:hover{background:rgba(255,255,255,0.08);}
-.shop-tab.active{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;border-color:transparent;box-shadow:0 4px 12px rgba(245,184,0,0.3);}
-.shop-items{display:flex;flex-direction:column;gap:8px;}
-.shop-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
-.shop-item:hover{background:rgba(255,255,255,0.06);}
-.shop-item.owned{border-color:rgba(39,165,90,0.3);background:rgba(39,165,90,0.05);}
-.shop-item-icon{font-size:32px;flex-shrink:0;}
-.shop-item-info{flex:1;}
-.shop-item-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
-.shop-item-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
-.shop-item-price{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:800;color:#F5B800;}
-.shop-item-btn{padding:6px 14px;border-radius:10px;border:none;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
-.shop-item-btn.buy{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;}
-.shop-item-btn.buy:active{transform:scale(0.95);}
-.shop-item-btn.owned{background:rgba(39,165,90,0.15);color:#4ade80;cursor:default;}
-.shop-item-btn.equipped{background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;}
-
-/* Golden cards effect */
-.card.golden{border:2px solid #FFD700;box-shadow:0 0 15px rgba(255,215,0,0.4),0 6px 16px rgba(0,0,0,0.4);}
-.card.golden::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,215,0,0.15),transparent 50%);pointer-events:none;z-index:11;border-radius:var(--radius);}
-.card-back.golden{border:2px solid #FFD700;}
-.card-back.golden::after{color:#FFD700;border-color:#FFD700;}
-
-/* Table themes */
-body.theme-dark{
-  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a1a2e 0%, #0f0f1a 40%, #0a0a12 100%);
-}
-body.theme-casino{
-  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a1a 0%, #1a0f0f 40%, #120a0a 100%);
-}
-body.theme-forest{
-  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a3a2e 0%, #0f2a1a 40%, #0a1a12 100%);
-}
-body.theme-ocean{
-  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a2a4a 0%, #0f1a2a 40%, #0a0a1a 100%);
-}
-body.theme-cyber{
-  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a4a 0%, #1a0f2a 40%, #120a1a 100%);
-}
-
-/* Referral System */
-.ref-card{background:rgba(102,126,234,0.08);backdrop-filter:blur(20px);border:1px solid rgba(102,126,234,0.2);border-radius:24px;padding:22px;width:100%;max-width:360px;margin-bottom:16px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
-.ref-card h3{font-size:15px;color:#a5b4fc;margin-bottom:8px;font-weight:700;}
-.ref-link{font-family:'SF Mono',monospace;font-size:14px;color:#c7d2fe;background:rgba(102,126,234,0.15);padding:10px 14px;border-radius:12px;word-break:break-all;margin:8px 0;border:1px dashed rgba(102,126,234,0.3);}
-.ref-btn-share{width:100%;padding:12px;border-radius:14px;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-family:'Nunito',sans-serif;font-weight:800;font-size:15px;cursor:pointer;transition:all 0.15s;box-shadow:0 4px 16px rgba(102,126,234,0.3);margin-top:8px;}
-.ref-btn-share:active{transform:scale(0.97);}
-.ref-reward-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:linear-gradient(135deg,#27A55A,#4ade80);color:#fff;padding:24px 32px;border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:9999;text-align:center;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);max-width:280px;pointer-events:none;}
-.ref-reward-popup.show{transform:translate(-50%,-50%) scale(1);}
-.ref-reward-icon{font-size:48px;margin-bottom:8px;}
-.ref-reward-title{font-size:18px;font-weight:800;margin-bottom:4px;}
-.ref-reward-sub{font-size:13px;opacity:0.9;}
-.ref-stats{font-size:12px;color:rgba(255,255,255,0.5);margin-top:6px;}
-
-/* 4 Players Mode */
-.game-table-4{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:8px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;}
-.player-top{grid-column:2;grid-row:1;text-align:center;}
-.player-left{grid-column:1;grid-row:2;display:flex;flex-direction:column;align-items:center;}
-.player-right{grid-column:3;grid-row:2;display:flex;flex-direction:column;align-items:center;}
-.player-bottom{grid-column:1/4;grid-row:3;width:100%;}
-.hand-h4{display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;}
-.hand-v4{display:flex;flex-direction:column;gap:3px;align-items:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;max-height:200px;}
-.card-back-v4{width:36px;height:54px;border-radius:8px;background:#1a1a1a;border:1px solid #333;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.5);position:relative;overflow:hidden;}
-.card-back-v4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
-.card-back-v4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:8px;color:#ffcc00;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,0.5);border:1px solid #ffcc00;padding:1px 3px;border-radius:2px;}
-.player-name-4{font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;font-weight:600;white-space:nowrap;}
-.player-avatar-4{font-size:20px;margin-bottom:2px;}
-.player-cards-4{font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px;}
-.player-active .player-name-4{color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.5);}
-.player-active .player-avatar-4{animation:turnPulse 1.5s infinite;}
-@keyframes turnPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.15);}}
-.center-4{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:center;gap:10px;}
-.draw-pile-4{width:48px;height:72px;border-radius:10px;background:#1a1a1a;border:1px solid #333;cursor:pointer;box-shadow:0 2px 0 #1a1a1a,0 4px 0 #1a1a1a,0 6px 0 #1a1a1a,0 8px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:rgba(255,255,255,0.7);position:relative;overflow:hidden;transform:translateY(-3px);transition:all 0.2s;}
-.draw-pile-4:active{transform:translateY(0) scale(0.95);}
-.draw-pile-4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
-.draw-pile-4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:10px;color:#ffcc00;letter-spacing:1px;border:1px solid #ffcc00;padding:1px 4px;border-radius:2px;}
-.draw-pile-4.disabled{opacity:0.35;cursor:default;}
-.top-card-4{width:48px;height:72px;border-radius:10px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.5);overflow:hidden;animation:topFloat 3s ease-in-out infinite;}
-.top-card-4.r{background:#ff4444;}.top-card-4.b{background:#2B7FD4;}.top-card-4.g{background:#27A55A;}.top-card-4.y{background:#F5B800;}.top-card-4.w{background:#111;border-color:#333;}
-.card-oval-4{width:32px;height:48px;border-radius:50%;background:#fff;position:absolute;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);transform:rotate(-12deg);z-index:2;}
-.card-center-4{font-family:'Nunito',sans-serif;font-weight:900;font-size:18px;text-align:center;line-height:1;transform:rotate(12deg);}
-.card-corner-4{position:absolute;font-family:'Nunito',sans-serif;font-weight:900;font-size:10px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;z-index:3;}
-.card-corner-4.top-left{top:3px;left:3px;}
-.card-corner-4.bottom-right{bottom:3px;right:3px;transform:rotate(180deg);}
-.card-4{width:48px;height:72px;border-radius:10px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 4px 10px rgba(0,0,0,0.4);overflow:hidden;}
-.card-4::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.05) 40%,transparent 60%);pointer-events:none;z-index:10;border-radius:10px;}
-.card-4.r{background:#ff4444;}.card-4.b{background:#2B7FD4;}.card-4.g{background:#27A55A;}.card-4.y{background:#F5B800;}.card-4.w{background:#111;border-color:#333;}
-.card-4.playable{transform:translateY(-8px) scale(1.05);z-index:10;}
-.card-4.playable::before{content:'';position:absolute;inset:-2px;border-radius:12px;border:2px solid rgba(255,255,255,0.8);opacity:0.6;animation:glow 1.2s infinite alternate;pointer-events:none;z-index:15;}
-.card-4.not-playable{opacity:0.35;cursor:default;filter:grayscale(0.3);}
-.card-4:active{transform:translateY(-2px) scale(0.97);}
-.hand-scroll-4{display:flex;gap:3px;overflow-x:auto;padding:16px 8px 24px;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:center;align-items:flex-end;min-height:100px;position:relative;perspective:600px;}
-.hand-scroll-4::-webkit-scrollbar{display:none;}
-.hand-scroll-4 .card-4{transform-origin:bottom center;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);margin-bottom:0;}
-.hand-scroll-4 .card-4:nth-child(1){transform:rotate(-12deg) translateY(8px);}
-.hand-scroll-4 .card-4:nth-child(2){transform:rotate(-9deg) translateY(5px);}
-.hand-scroll-4 .card-4:nth-child(3){transform:rotate(-6deg) translateY(2px);}
-.hand-scroll-4 .card-4:nth-child(4){transform:rotate(-3deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(5){transform:rotate(0deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(6){transform:rotate(3deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(7){transform:rotate(6deg) translateY(2px);}
-.hand-scroll-4 .card-4:nth-child(8){transform:rotate(9deg) translateY(5px);}
-.hand-scroll-4 .card-4:nth-child(9){transform:rotate(12deg) translateY(8px);}
-.hand-scroll-4 .card-4.playable:hover,.hand-scroll-4 .card-4.playable:active{transform:translateY(-18px) scale(1.1) !important;z-index:100;}
-
-/* 2v2 Team Mode */
-.game-table-22{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:8px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;}
-.team-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:4px;}
-.team-red{background:rgba(232,59,59,0.3);color:#ff6b6b;}
-.team-blue{background:rgba(43,127,212,0.3);color:#6bb6ff;}
-.team-partner{font-size:10px;color:#27A55A;font-weight:700;margin-top:2px;}
-.partner-btn{padding:6px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;margin-left:4px;}
-.partner-btn:active{transform:scale(0.95);}
-.partner-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
-.team-win-popup{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:200;flex-direction:column;gap:16px;text-align:center;padding:20px;backdrop-filter:blur(5px);}
-.team-win-popup.show{display:flex;}
-.team-win-title{font-family:'Nunito',sans-serif;font-size:32px;font-weight:900;color:#27A55A;text-shadow:0 0 30px rgba(39,165,90,0.5);}
-.team-win-sub{font-size:16px;color:rgba(255,255,255,0.7);}
-.team-win-players{display:flex;gap:16px;margin:12px 0;}
-.team-win-avatar{font-size:48px;}
-</style>
 
 <div class="coins-popup" id="coins-popup"></div>
 
