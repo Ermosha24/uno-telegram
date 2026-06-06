@@ -1326,6 +1326,378 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
 });
+
+
+// ===== BOT DIFFICULTY =====
+let botDifficulty = localStorage.getItem('uno-bot-diff') || 'easy';
+
+function setBotDiff(btn) {
+  document.querySelectorAll('.bot-diff-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  botDifficulty = btn.dataset.diff;
+  localStorage.setItem('uno-bot-diff', botDifficulty);
+  const labels = {
+    easy: lang === 'ru' ? 'Бот играет случайно' : 'Bot plays randomly',
+    normal: lang === 'ru' ? 'Бот играет умно' : 'Bot plays smart',
+    hard: lang === 'ru' ? 'Бот играет как бог' : 'Bot plays like a god'
+  };
+  const lbl = document.getElementById('bot-diff-label');
+  if (lbl) lbl.textContent = labels[botDifficulty];
+}
+
+function initBotDiff() {
+  document.querySelectorAll('.bot-diff-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.diff === botDifficulty);
+  });
+  const labels = {
+    easy: lang === 'ru' ? 'Бот играет случайно' : 'Bot plays randomly',
+    normal: lang === 'ru' ? 'Бот играет умно' : 'Bot plays smart',
+    hard: lang === 'ru' ? 'Бот играет как бог' : 'Bot plays like a god'
+  };
+  const lbl = document.getElementById('bot-diff-label');
+  if (lbl) lbl.textContent = labels[botDifficulty];
+}
+
+// ===== DAILY QUESTS =====
+const QUEST_TEMPLATES = [
+  {id:'play3', name:'Игрок', desc:'Сыграйте 3 партии', icon:'🎮', target:3, reward:30, type:'games'},
+  {id:'winBot', name:'Ботоборец', desc:'Победите бота', icon:'🤖', target:1, reward:50, type:'botWins'},
+  {id:'win2row', name:'Серия', desc:'2 победы подряд', icon:'🔥', target:2, reward:25, type:'streak'},
+  {id:'noWild', name:'Чистая игра', desc:'Победите без Wild', icon:'🎯', target:1, reward:40, type:'noWildWins'},
+  {id:'playColor', name:'Монохром', desc:'Сыграйте 5 карт одного цвета', icon:'🎨', target:5, reward:20, type:'sameColor'},
+  {id:'draw10', name:'Страдалец', desc:'Возьмите 10 карт за игру', icon:'📚', target:10, reward:15, type:'drawCards'},
+  {id:'winFast', name:'Молниеносный', desc:'Победите за 8 ходов', icon:'⚡', target:1, reward:35, type:'fastWins'},
+  {id:'usePlus4', name:'Агрессор', desc:'Сыграйте +4 2 раза', icon:'💣', target:2, reward:20, type:'plus4Plays'}
+];
+
+function getQuests() {
+  let data = JSON.parse(localStorage.getItem('uno-quests') || '{}');
+  let today = new Date().toDateString();
+  if (data.date !== today) {
+    // Generate new quests
+    const shuffled = [...QUEST_TEMPLATES].sort(() => Math.random() - 0.5);
+    data = {
+      date: today,
+      quests: shuffled.slice(0, 3).map(q => ({...q, progress: 0, completed: false, claimed: false}))
+    };
+    localStorage.setItem('uno-quests', JSON.stringify(data));
+  }
+  return data;
+}
+
+function saveQuests(data) {
+  localStorage.setItem('uno-quests', JSON.stringify(data));
+}
+
+function updateQuestProgress(type, amount = 1) {
+  let data = getQuests();
+  let changed = false;
+  data.quests.forEach(q => {
+    if (!q.completed && q.type === type) {
+      q.progress = Math.min(q.target, q.progress + amount);
+      if (q.progress >= q.target) {
+        q.completed = true;
+        changed = true;
+      }
+    }
+  });
+  if (changed) {
+    saveQuests(data);
+    showToast(lang === 'ru' ? 'Задание выполнено! Откройте 📋' : 'Quest completed! Open 📋', 'success');
+    updateQuestBadge();
+  } else {
+    saveQuests(data);
+  }
+}
+
+function claimQuest(idx) {
+  let data = getQuests();
+  let q = data.quests[idx];
+  if (!q.completed || q.claimed) return;
+  q.claimed = true;
+  saveQuests(data);
+  addCoins(q.reward, true);
+  addXP(q.reward);
+  showToast('+' + q.reward + ' 🪙 + ' + q.reward + ' XP', 'success');
+  renderQuests();
+  updateQuestBadge();
+}
+
+function renderQuests() {
+  const data = getQuests();
+  const list = document.getElementById('quests-list');
+  const refresh = document.getElementById('quests-refresh');
+  if (!list) return;
+
+  // Time until refresh
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  const hoursLeft = Math.floor((tomorrow - now) / 3600000);
+  if (refresh) refresh.textContent = (lang === 'ru' ? 'Обновятся через ' : 'Refresh in ') + hoursLeft + 'h';
+
+  list.innerHTML = '';
+  data.quests.forEach((q, i) => {
+    const pct = Math.min(100, (q.progress / q.target) * 100);
+    const div = document.createElement('div');
+    div.className = 'quest-item' + (q.completed ? ' completed' : '');
+    div.innerHTML = `
+      <div class="quest-icon">${q.icon}</div>
+      <div class="quest-info">
+        <div class="quest-name">${q.name}</div>
+        <div class="quest-desc">${q.desc} (${q.progress}/${q.target})</div>
+        <div class="quest-progress-bar"><div class="quest-progress-fill" style="width:${pct}%"></div></div>
+        <div class="quest-reward">+${q.reward} 🪙 · +${q.reward} XP</div>
+      </div>
+      ${q.completed && !q.claimed ? `<button class="quest-claim-btn" onclick="claimQuest(${i})">${lang === 'ru' ? 'Забрать' : 'Claim'}</button>` : ''}
+      ${q.claimed ? '<div style="font-size:20px;color:#27A55A;font-weight:800;">✓</div>' : ''}
+    `;
+    list.appendChild(div);
+  });
+}
+
+function updateQuestBadge() {
+  const data = getQuests();
+  const claimable = data.quests.filter(q => q.completed && !q.claimed).length;
+  const badge = document.getElementById('quests-badge');
+  if (badge) {
+    badge.textContent = claimable;
+    badge.style.display = claimable > 0 ? 'block' : 'none';
+  }
+}
+
+function toggleQuests() {
+  const p = document.getElementById('quests-panel');
+  if (!p) return;
+  if (p.classList.contains('show')) {
+    p.classList.remove('show');
+  } else {
+    renderQuests();
+    p.classList.add('show');
+  }
+}
+
+// ===== ENHANCED BOT AI =====
+function botChooseColorSmart(hand, difficulty, topCard, currentColor) {
+  if (difficulty === 'easy') return botChooseColor(hand);
+
+  // Normal/Hard: choose color we have most of
+  const counts = {r:0, b:0, g:0, y:0};
+  hand.forEach(c => { if (c.c !== 'w') counts[c.c] = (counts[c.c] || 0) + 1; });
+  let best = 'r', max = -1;
+  for (const c in counts) { if (counts[c] > max) { max = counts[c]; best = c; } }
+  if (max === 0) best = ['r','b','g','y'][Math.floor(Math.random()*4)];
+
+  // Hard: if opponent has 1-2 cards, choose color they likely don't have
+  if (difficulty === 'hard' && hand.length > 0) {
+    // Try to avoid colors we just played (opponent might have them)
+    const avoid = currentColor;
+    if (counts[avoid] === 0) {
+      // We don't have avoid color, good - but pick what we have most
+    }
+  }
+  return best;
+}
+
+function botMoveEnhanced(state) {
+  if (!state || state.turn !== 'guest' || state.phase !== 'playing') return;
+  if (botTimer) clearTimeout(botTimer);
+
+  const delay = botDifficulty === 'hard' ? 800 + Math.random() * 400 : (botDifficulty === 'normal' ? 1000 + Math.random() * 800 : 1500 + Math.random() * 1500);
+
+  botTimer = setTimeout(() => {
+    db.ref('rooms/'+roomCode).once('value').then(snap => {
+      const s = snap.val();
+      if (!s || s.turn !== 'guest' || s.phase !== 'playing') return;
+
+      const botHand = s.guest.hand || [];
+      const top = s.discard[s.discard.length-1];
+      const cc = s.currentColor;
+      const opponentHandSize = s.host ? (s.host.hand || []).length : 7;
+
+      const playable = [];
+      botHand.forEach((card, idx) => {
+        if (canPlay(card, top, cc, s.drawStack)) playable.push({card, idx});
+      });
+
+      if (playable.length > 0) {
+        let pick = null;
+
+        if (botDifficulty === 'easy') {
+          // Random pick
+          pick = playable[Math.floor(Math.random() * playable.length)];
+        } else if (botDifficulty === 'normal') {
+          // Prefer action cards, then by color count
+          if (s.drawStack > 0) {
+            pick = playable.find(({card}) => card.v === '+2') || playable.find(({card}) => card.v === 'wild4');
+          }
+          if (!pick) pick = playable.find(({card}) => card.v === '+2');
+          if (!pick) pick = playable.find(({card}) => card.v === 'skip');
+          if (!pick) pick = playable.find(({card}) => card.v === 'rev');
+          if (!pick) pick = playable.find(({card}) => card.v === 'wild4');
+          if (!pick) pick = playable.find(({card}) => card.v === 'wild');
+          if (!pick) pick = playable[Math.floor(Math.random() * playable.length)];
+        } else {
+          // Hard mode - strategic
+          // 1. If opponent has 1-2 cards, play skip/reverse/+2 to block
+          if (opponentHandSize <= 2) {
+            pick = playable.find(({card}) => card.v === 'skip') || 
+                  playable.find(({card}) => card.v === 'rev') || 
+                  playable.find(({card}) => card.v === '+2') ||
+                  playable.find(({card}) => card.v === 'wild4');
+          }
+          // 2. If draw stack active, must respond
+          if (!pick && s.drawStack > 0) {
+            pick = playable.find(({card}) => card.v === '+2') || playable.find(({card}) => card.v === 'wild4');
+          }
+          // 3. Save wild for emergencies, prefer action cards
+          if (!pick) pick = playable.find(({card}) => card.v === '+2');
+          if (!pick) pick = playable.find(({card}) => card.v === 'skip');
+          if (!pick) pick = playable.find(({card}) => card.v === 'rev');
+          // 4. If many cards in hand, use wild to dump
+          if (!pick && botHand.length >= 6) {
+            pick = playable.find(({card}) => card.v === 'wild') || playable.find(({card}) => card.v === 'wild4');
+          }
+          // 5. Prefer cards of color we have most of
+          if (!pick) {
+            const colorCounts = {r:0,b:0,g:0,y:0};
+            botHand.forEach(c => { if (c.c !== 'w') colorCounts[c.c]++; });
+            playable.sort((a,b) => {
+              if (a.card.c === 'w' && b.card.c !== 'w') return 1;
+              if (b.card.c === 'w' && a.card.c !== 'w') return -1;
+              return (colorCounts[b.card.c] || 0) - (colorCounts[a.card.c] || 0);
+            });
+            pick = playable[0];
+          }
+          if (!pick) pick = playable[Math.floor(Math.random() * playable.length)];
+        }
+
+        const card = pick.card;
+        const idx = pick.idx;
+        s.guest.hand.splice(idx, 1);
+        s.discard.push(card);
+        s.ts = Date.now();
+
+        // Track quest progress for same color
+        if (window._botSameColor && window._botSameColor.color === card.c) {
+          window._botSameColor.count++;
+        } else if (card.c !== 'w') {
+          window._botSameColor = {color: card.c, count: 1};
+        }
+
+        if (card.v === 'wild' || card.v === 'wild4') {
+          s.currentColor = botChooseColorSmart(s.guest.hand, botDifficulty, top, cc);
+          if (card.v === 'wild4') s.drawStack += 4;
+        } else {
+          if (card.c !== 'w') s.currentColor = card.c;
+        }
+
+        if (card.v === 'skip') { s.lastAction = t('bot') + ' ' + t('skip'); s.turn = 'guest'; shakeScreen(); }
+        else if (card.v === 'rev') { s.lastAction = t('reverse'); s.turn = 'guest'; }
+        else if (card.v === '+2') { s.drawStack += 2; s.turn = 'host'; s.lastAction = t('plus2') + ' ' + t('host'); }
+        else if (card.v === 'wild4') { s.turn = 'host'; s.lastAction = t('plus4') + ' ' + t('host'); rainbowFlash(); }
+        else { s.turn = 'host'; s.lastAction = ''; }
+
+        if (s.guest.hand.length === 1 && (botDifficulty === 'normal' || botDifficulty === 'hard' ? Math.random() > 0.05 : Math.random() > 0.15)) {
+          s.lastAction = t('bot') + ' ' + t('uno') + '!';
+        }
+
+        if (s.guest.hand.length === 0) {
+          s.phase = 'ended';
+          s.winner = 'guest';
+        }
+
+        saveRoom(s);
+      } else {
+        if (s.drawStack > 0) {
+          const count = s.drawStack;
+          for (let i = 0; i < count; i++) {
+            if (s.deck.length === 0) reshuffleDeck(s);
+            s.guest.hand.push(s.deck.pop());
+          }
+          s.drawStack = 0;
+          s.lastAction = t('bot') + ' ' + t('tookCards') + ' +' + count;
+          s.turn = 'host';
+        } else {
+          if (s.deck.length === 0) reshuffleDeck(s);
+          const drawn = s.deck.pop();
+          s.guest.hand.push(drawn);
+          if (canPlay(drawn, top, cc, 0)) {
+            if (botDifficulty === 'hard' || (botDifficulty === 'normal' && Math.random() > 0.3)) {
+              s.guest.hand.pop();
+              s.discard.push(drawn);
+              if (drawn.c !== 'w') s.currentColor = drawn.c;
+              s.turn = 'host';
+              s.lastAction = t('bot') + ' ' + t('drawOne');
+            } else {
+              s.turn = 'host';
+              s.lastAction = t('bot') + ' ' + t('drawOne');
+            }
+          } else {
+            s.turn = 'host';
+            s.lastAction = t('bot') + ' ' + t('drawOne');
+          }
+        }
+        s.ts = Date.now();
+        saveRoom(s);
+      }
+    });
+  }, delay);
+}
+
+// Override original botMove
+const originalBotMove = botMove;
+botMove = botMoveEnhanced;
+
+// Track quest progress hooks
+const originalCheckWin = checkWin;
+checkWin = function(state) {
+  const me = myRole;
+  const won = state[me].hand.length === 0;
+  if (won) {
+    state.phase = 'ended';
+    state.winner = myRole;
+    addXP(100);
+    saveLB({name: myProfile.name || myName, xp: myProfile.xp});
+    playSound('win');
+    confetti();
+
+    // Quest tracking
+    updateQuestProgress('games');
+    if (isBotGame) updateQuestProgress('botWins');
+
+    const turns = state.discard ? state.discard.length : 0;
+    if (turns <= 8) updateQuestProgress('fastWins');
+
+    const usedWild = state[me] && state[me].hand && state[me].hand.some(c => c.c === 'w');
+    if (!usedWild) updateQuestProgress('noWildWins');
+
+    // Track same color quest (check played cards)
+    const colorCounts = {};
+    state.discard.forEach(c => { if (c.c !== 'w') colorCounts[c.c] = (colorCounts[c.c] || 0) + 1; });
+    const maxColor = Math.max(...Object.values(colorCounts), 0);
+    if (maxColor >= 5) updateQuestProgress('sameColor', maxColor);
+
+    // Track +4 plays
+    const plus4Count = state.discard.filter(c => c.v === 'wild4').length;
+    if (plus4Count >= 2) updateQuestProgress('plus4Plays', plus4Count);
+
+    // Track draw cards
+    // This is harder to track accurately, skip for now
+  }
+};
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  initBotDiff();
+  const qBtn = document.getElementById('quests-btn');
+  if (qBtn) qBtn.addEventListener('click', toggleQuests);
+  updateQuestBadge();
+
+  // Refresh quest badge every minute
+  setInterval(updateQuestBadge, 60000);
+});
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -2542,6 +2914,35 @@ input[type=text]::placeholder{
 .invite-btn{padding:6px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
 .invite-btn:active{transform:scale(0.95);}
 .invite-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
+
+/* Daily Quests */
+.quests-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
+.quests-btn:active{transform:scale(0.9);}
+.quests-badge{position:absolute;top:-4px;right:-4px;background:#27A55A;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(39,165,90,0.4);}
+.quests-panel{position:fixed;top:70px;right:14px;width:320px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.quests-panel.show{display:flex;}
+.quests-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.quests-refresh{font-size:11px;color:rgba(255,255,255,0.4);}
+.quest-item{display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;position:relative;overflow:hidden;}
+.quest-item.completed{background:rgba(39,165,90,0.08);border-color:rgba(39,165,90,0.2);}
+.quest-item.completed::after{content:'✓';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:18px;color:#27A55A;font-weight:800;}
+.quest-icon{font-size:24px;flex-shrink:0;}
+.quest-info{flex:1;}
+.quest-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.quest-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.quest-progress-bar{height:4px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:6px;overflow:hidden;}
+.quest-progress-fill{height:100%;background:linear-gradient(90deg,#F5B800,#ff6b6b);border-radius:4px;transition:width 0.5s;}
+.quest-reward{font-size:11px;color:#F5B800;font-weight:700;margin-top:4px;}
+.quest-claim-btn{padding:6px 14px;border-radius:10px;border:none;background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+.quest-claim-btn:active{transform:scale(0.95);}
+.quest-claim-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
+
+/* Bot Difficulty */
+.bot-diff-row{display:flex;gap:8px;margin-top:10px;justify-content:center;}
+.bot-diff-btn{padding:8px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.bot-diff-btn:hover{background:rgba(255,255,255,0.08);}
+.bot-diff-btn.selected{background:linear-gradient(135deg,#7B68EE,#6a5acd);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(123,104,238,0.3);}
+.bot-diff-label{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px;}
 </style>
 <base target="_blank">
 <base target="_blank">
@@ -2563,6 +2964,7 @@ input[type=text]::placeholder{
 <!-- Lang -->
 <div class="lang-switcher">
   <button class="players-btn" id="players-btn">👥<span class="players-badge" id="players-badge" style="display:none">0</span></button>
+  <button class="quests-btn" id="quests-btn">📋<span class="quests-badge" id="quests-badge" style="display:none">0</span></button>
   <button class="lang-btn" id="lang-ru">🇷🇺 RU</button>
   <button class="lang-btn" id="lang-en">🇬🇧 EN</button>
 </div>
@@ -2596,7 +2998,13 @@ input[type=text]::placeholder{
   <div class="lobby-card">
     <h3 id="bot-title">🤖 Играть с ботом</h3>
     <div class="room-hint" id="bot-hint">Тренировка без ожидания</div>
-    <button class="btn btn-purple" id="bot-btn">Играть с ботом</button>
+    <div class="bot-diff-row" id="bot-diff-row">
+    <button class="bot-diff-btn selected" data-diff="easy" onclick="setBotDiff(this)">🟢 Easy</button>
+    <button class="bot-diff-btn" data-diff="normal" onclick="setBotDiff(this)">🟡 Normal</button>
+    <button class="bot-diff-btn" data-diff="hard" onclick="setBotDiff(this)">🔴 Hard</button>
+  </div>
+  <div class="bot-diff-label" id="bot-diff-label">Бот играет случайно</div>
+  <button class="btn btn-purple" id="bot-btn">Играть с ботом</button>
   </div>
   <div class="continue-card" id="continue-card" style="display:none;">
     <h3 id="continue-title">Продолжить игру</h3>
@@ -2787,6 +3195,35 @@ input[type=text]::placeholder{
 .invite-btn{padding:6px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
 .invite-btn:active{transform:scale(0.95);}
 .invite-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
+
+/* Daily Quests */
+.quests-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
+.quests-btn:active{transform:scale(0.9);}
+.quests-badge{position:absolute;top:-4px;right:-4px;background:#27A55A;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(39,165,90,0.4);}
+.quests-panel{position:fixed;top:70px;right:14px;width:320px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.quests-panel.show{display:flex;}
+.quests-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.quests-refresh{font-size:11px;color:rgba(255,255,255,0.4);}
+.quest-item{display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;position:relative;overflow:hidden;}
+.quest-item.completed{background:rgba(39,165,90,0.08);border-color:rgba(39,165,90,0.2);}
+.quest-item.completed::after{content:'✓';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:18px;color:#27A55A;font-weight:800;}
+.quest-icon{font-size:24px;flex-shrink:0;}
+.quest-info{flex:1;}
+.quest-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.quest-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.quest-progress-bar{height:4px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:6px;overflow:hidden;}
+.quest-progress-fill{height:100%;background:linear-gradient(90deg,#F5B800,#ff6b6b);border-radius:4px;transition:width 0.5s;}
+.quest-reward{font-size:11px;color:#F5B800;font-weight:700;margin-top:4px;}
+.quest-claim-btn{padding:6px 14px;border-radius:10px;border:none;background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+.quest-claim-btn:active{transform:scale(0.95);}
+.quest-claim-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
+
+/* Bot Difficulty */
+.bot-diff-row{display:flex;gap:8px;margin-top:10px;justify-content:center;}
+.bot-diff-btn{padding:8px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.bot-diff-btn:hover{background:rgba(255,255,255,0.08);}
+.bot-diff-btn.selected{background:linear-gradient(135deg,#7B68EE,#6a5acd);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(123,104,238,0.3);}
+.bot-diff-label{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px;}
 </style>
 
 <div class="coins-popup" id="coins-popup"></div>
@@ -2796,6 +3233,15 @@ input[type=text]::placeholder{
   <div class="panel-title">🏅 Достижения</div>
   <div id="ach-list"></div>
   <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;text-align:center;color:rgba(255,255,255,0.5);" id="ach-progress">0/8 разблокировано</div>
+</div>
+
+<!-- Quests Panel -->
+<div class="quests-panel" id="quests-panel">
+  <div class="quests-header">
+    <div class="panel-title">📋 Задания</div>
+    <div class="quests-refresh" id="quests-refresh">Обновятся через 12ч</div>
+  </div>
+  <div id="quests-list"></div>
 </div>
 
 <!-- Players Panel -->
