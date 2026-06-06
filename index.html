@@ -108,7 +108,8 @@ function updateProfileUI() {
   const nmEl = document.getElementById('prof-name');
   const elEl = document.getElementById('prof-elo');
   const coinsEl = document.getElementById('prof-coins');
-  if (avEl) avEl.textContent = myProfile.avatar || '🐸';
+  const eqAv = getEquippedAvatar();
+  if (avEl) avEl.textContent = eqAv || myProfile.avatar || '🐸';
   if (nmEl) nmEl.textContent = myProfile.name || (lang==='ru'?'Игрок':'Player');
   if (elEl) elEl.textContent = '⭐ ' + myProfile.elo;
   if (coinsEl) coinsEl.textContent = myProfile.coins || 0;
@@ -117,16 +118,30 @@ function selAv(el) {
   document.querySelectorAll('.av').forEach(a => a.classList.remove('selected'));
   el.classList.add('selected');
 }
+
+function getEquippedAvatar() {
+  const inv = getInventory();
+  if (inv.equipped.avatar) {
+    const item = SHOP_ITEMS.avatars.find(a => a.id === inv.equipped.avatar);
+    if (item) return item.icon;
+  }
+  return null;
+}
 function saveProfile() {
   let n = document.getElementById('nick-input').value.trim();
   if (!n) n = (lang==='ru'?'Игрок':'Player') + Math.floor(Math.random()*999);
   let a = document.querySelector('.av.selected')?.getAttribute('data') || '🐸';
+  // Check if equipped avatar from shop
+  const eqAv = getEquippedAvatar();
+  if (eqAv) a = eqAv;
   myProfile.name = n;
   myProfile.avatar = a;
   localStorage.setItem('uno-profile', JSON.stringify(myProfile));
   document.getElementById('setup-overlay').style.display = 'none';
   checkDaily();
   updateProfileUI();
+  // Update online status with new avatar
+  if (myProfile.name) initOnlineStatus();
 }
 function checkDaily() {
   let today = new Date().toDateString();
@@ -804,7 +819,7 @@ function renderGame(state) {
   const show = Math.min(theirHand.length, 10);
   for (let i = 0; i < show; i++) {
     const d = document.createElement('div');
-    d.className = 'card-back';
+    const inv3 = getInventory(); const hasGold3 = inv3.equipped.cardstyle === 'cd_gold'; d.className = 'card-back' + (hasGold3 ? ' golden' : '');
     oppEl.appendChild(d);
   }
 
@@ -813,7 +828,9 @@ function renderGame(state) {
   document.getElementById('color-dot').style.boxShadow = `0 0 20px ${dots[cc] || '#555'}80`;
 
   const tcEl = document.getElementById('top-card');
-  tcEl.className = 'top-card ' + (topCard.c === 'w' && cc ? cc : topCard.c);
+  const inv2 = getInventory();
+  const hasGold2 = inv2.equipped.cardstyle === 'cd_gold';
+  tcEl.className = 'top-card ' + (topCard.c === 'w' && cc ? cc : topCard.c) + (hasGold2 ? ' golden' : '');
   tcEl.innerHTML = cardHTML(topCard);
 
   const msgs = [];
@@ -831,7 +848,9 @@ function renderGame(state) {
     const realIdx = myHand.indexOf(card);
     const div = document.createElement('div');
     const playable = isMyTurn && canPlay(card, topCard, cc, state.drawStack);
-    div.className = 'card ' + card.c + (playable ? ' playable' : ' not-playable');
+    const inv = getInventory();
+  const hasGold = inv.equipped.cardstyle === 'cd_gold';
+  div.className = 'card ' + card.c + (playable ? ' playable' : ' not-playable') + (hasGold ? ' golden' : '');
     div.innerHTML = cardHTML(card) + '<div class="swipe-hint">↑</div>';
     if (playable) div.onclick = () => playCard(realIdx);
     handEl.appendChild(div);
@@ -1697,6 +1716,186 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Refresh quest badge every minute
   setInterval(updateQuestBadge, 60000);
+});
+
+
+// ===== SHOP SYSTEM =====
+const SHOP_ITEMS = {
+  avatars: [
+    {id:'av_unicorn', name:'Единорог', desc:'Магический аватар', icon:'🦄', price:150, type:'avatar'},
+    {id:'av_dragon', name:'Дракон', desc:'Огненный аватар', icon:'🐉', price:200, type:'avatar'},
+    {id:'av_ghost', name:'Призрак', desc:'Страшный аватар', icon:'👻', price:120, type:'avatar'},
+    {id:'av_robot', name:'Робот', desc:'Техно аватар', icon:'🤖', price:180, type:'avatar'},
+    {id:'av_alien', name:'Пришелец', desc:'Из космоса', icon:'👽', price:160, type:'avatar'},
+    {id:'av_ninja', name:'Ниндзя', desc:'Теневой аватар', icon:'🥷', price:250, type:'avatar'},
+    {id:'av_king', name:'Король', desc:'Властелин', icon:'🤴', price:300, type:'avatar'},
+    {id:'av_queen', name:'Королева', desc:'Владычица', icon:'👸', price:300, type:'avatar'},
+  ],
+  themes: [
+    {id:'th_casino', name:'Казино', desc:'Красный фетр', icon:'🎰', price:100, type:'theme', value:'theme-casino'},
+    {id:'th_forest', name:'Лес', desc:'Зелёный мох', icon:'🌲', price:100, type:'theme', value:'theme-forest'},
+    {id:'th_ocean', name:'Океан', desc:'Синяя глубина', icon:'🌊', price:100, type:'theme', value:'theme-ocean'},
+    {id:'th_cyber', name:'Киберпанк', desc:'Неоновый стол', icon:'💜', price:150, type:'theme', value:'theme-cyber'},
+  ],
+  cards: [
+    {id:'cd_gold', name:'Золотые карты', desc:'Блестящий эффект', icon:'✨', price:500, type:'cardstyle'},
+  ]
+};
+
+function getInventory() {
+  return JSON.parse(localStorage.getItem('uno-inventory') || '{"avatars":[],"themes":["th_dark"],"cardstyles":[],"equipped":{"avatar":null,"theme":"th_dark","cardstyle":null}}');
+}
+function saveInventory(inv) {
+  localStorage.setItem('uno-inventory', JSON.stringify(inv));
+}
+
+function buyItem(itemId) {
+  const inv = getInventory();
+  // Find item
+  let item = null;
+  for (const cat in SHOP_ITEMS) {
+    const found = SHOP_ITEMS[cat].find(i => i.id === itemId);
+    if (found) { item = found; break; }
+  }
+  if (!item) return false;
+
+  // Check if already owned
+  const list = inv[item.type + 's'] || [];
+  if (list.includes(itemId)) {
+    showToast(lang === 'ru' ? 'Уже куплено!' : 'Already owned!', 'warning');
+    return false;
+  }
+
+  // Check coins
+  if ((myProfile.coins || 0) < item.price) {
+    showToast(lang === 'ru' ? 'Недостаточно 🪙!' : 'Not enough 🪙!', 'error');
+    return false;
+  }
+
+  // Buy
+  addCoins(-item.price, true);
+  list.push(itemId);
+  inv[item.type + 's'] = list;
+  saveInventory(inv);
+  showToast((lang === 'ru' ? 'Куплено: ' : 'Bought: ') + item.name, 'success');
+  renderShop();
+  return true;
+}
+
+function equipItem(itemId, type) {
+  const inv = getInventory();
+  inv.equipped[type] = itemId;
+  saveInventory(inv);
+  applyEquipped();
+  renderShop();
+  showToast(lang === 'ru' ? 'Экипировано!' : 'Equipped!', 'success');
+}
+
+function applyEquipped() {
+  const inv = getInventory();
+
+  // Apply theme
+  document.body.className = '';
+  if (inv.equipped.theme) {
+    const themeItem = SHOP_ITEMS.themes.find(t => t.id === inv.equipped.theme);
+    if (themeItem) document.body.classList.add(themeItem.value);
+  }
+
+  // Apply golden cards
+  const hasGold = inv.equipped.cardstyle === 'cd_gold';
+  if (hasGold) {
+    document.body.classList.add('golden-cards');
+  }
+}
+
+let currentShopTab = 'avatars';
+function setShopTab(tab) {
+  currentShopTab = tab;
+  document.querySelectorAll('.shop-tab').forEach(t => t.classList.toggle('active', t.textContent.includes(tab === 'avatars' ? 'Аватарки' : tab === 'themes' ? 'Темы' : 'Карты')));
+  renderShop();
+}
+
+function renderShop() {
+  const inv = getInventory();
+  const container = document.getElementById('shop-items');
+  const balanceEl = document.getElementById('shop-balance');
+  if (balanceEl) balanceEl.textContent = myProfile.coins || 0;
+  if (!container) return;
+
+  container.innerHTML = '';
+  const items = SHOP_ITEMS[currentShopTab] || [];
+
+  items.forEach(item => {
+    const list = inv[item.type + 's'] || [];
+    const owned = list.includes(item.id);
+    const equipped = inv.equipped[item.type] === item.id;
+
+    const div = document.createElement('div');
+    div.className = 'shop-item' + (owned ? ' owned' : '');
+
+    let btn = '';
+    if (equipped) {
+      btn = '<button class="shop-item-btn equipped" disabled>✓ ' + (lang === 'ru' ? 'Надето' : 'Equipped') + '</button>';
+    } else if (owned) {
+      btn = `<button class="shop-item-btn buy" onclick="equipItem('${item.id}','${item.type}')">` + (lang === 'ru' ? 'Надеть' : 'Equip') + '</button>';
+    } else {
+      btn = `<button class="shop-item-btn buy" onclick="buyItem('${item.id}')">${item.price} 🪙</button>`;
+    }
+
+    div.innerHTML = `
+      <div class="shop-item-icon">${item.icon}</div>
+      <div class="shop-item-info">
+        <div class="shop-item-name">${item.name}</div>
+        <div class="shop-item-desc">${item.desc}</div>
+      </div>
+      ${btn}
+    `;
+    container.appendChild(div);
+  });
+
+  // Update tabs
+  document.querySelectorAll('.shop-tab').forEach((t, i) => {
+    const tabs = ['avatars', 'themes', 'cards'];
+    t.classList.toggle('active', tabs[i] === currentShopTab);
+  });
+}
+
+function toggleShop() {
+  const p = document.getElementById('shop-panel');
+  if (!p) return;
+  if (p.classList.contains('show')) {
+    p.classList.remove('show');
+  } else {
+    renderShop();
+    p.classList.add('show');
+  }
+}
+
+// Apply equipped on load
+document.addEventListener('DOMContentLoaded', () => {
+  applyEquipped();
+  const sBtn = document.getElementById('shop-btn');
+  if (sBtn) sBtn.addEventListener('click', toggleShop);
+
+  // Add new avatars to setup overlay if owned
+  const inv = getInventory();
+  if (inv.avatars && inv.avatars.length > 0) {
+    const avContainer = document.querySelector('#setup-overlay div[style*="flex-wrap"]');
+    if (avContainer) {
+      inv.avatars.forEach(avId => {
+        const item = SHOP_ITEMS.avatars.find(a => a.id === avId);
+        if (item && !avContainer.querySelector(`[data="${item.icon}"]`)) {
+          const span = document.createElement('span');
+          span.className = 'av';
+          span.setAttribute('data', item.icon);
+          span.setAttribute('onclick', 'selAv(this)');
+          span.style.cssText = 'font-size:38px;cursor:pointer;padding:10px;border-radius:14px;transition:all 0.2s;background:rgba(255,255,255,0.08);border:2px solid transparent;box-shadow:0 4px 10px rgba(0,0,0,0.2);';
+          span.textContent = item.icon;
+          avContainer.appendChild(span);
+        }
+      });
+    }
+  }
 });
 </script>
 <style>
@@ -2943,6 +3142,58 @@ input[type=text]::placeholder{
 .bot-diff-btn:hover{background:rgba(255,255,255,0.08);}
 .bot-diff-btn.selected{background:linear-gradient(135deg,#7B68EE,#6a5acd);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(123,104,238,0.3);}
 .bot-diff-label{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px;}
+
+/* Shop */
+.shop-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
+.shop-btn:active{transform:scale(0.9);}
+.shop-badge{position:absolute;top:-4px;right:-4px;background:#F5B800;color:#0a0a1a;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(245,184,0,0.4);}
+.shop-panel{position:fixed;top:70px;right:14px;width:340px;max-height:75vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.shop-panel.show{display:flex;}
+.shop-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.shop-balance{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:10px;padding:4px 10px;}
+.shop-balance-icon{font-size:14px;}
+.shop-balance-value{font-size:12px;font-weight:800;color:#F5B800;}
+.shop-tabs{display:flex;gap:6px;margin-bottom:8px;}
+.shop-tab{flex:1;padding:8px 4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all 0.2s;}
+.shop-tab:hover{background:rgba(255,255,255,0.08);}
+.shop-tab.active{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;border-color:transparent;box-shadow:0 4px 12px rgba(245,184,0,0.3);}
+.shop-items{display:flex;flex-direction:column;gap:8px;}
+.shop-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
+.shop-item:hover{background:rgba(255,255,255,0.06);}
+.shop-item.owned{border-color:rgba(39,165,90,0.3);background:rgba(39,165,90,0.05);}
+.shop-item-icon{font-size:32px;flex-shrink:0;}
+.shop-item-info{flex:1;}
+.shop-item-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.shop-item-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.shop-item-price{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:800;color:#F5B800;}
+.shop-item-btn{padding:6px 14px;border-radius:10px;border:none;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+.shop-item-btn.buy{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;}
+.shop-item-btn.buy:active{transform:scale(0.95);}
+.shop-item-btn.owned{background:rgba(39,165,90,0.15);color:#4ade80;cursor:default;}
+.shop-item-btn.equipped{background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;}
+
+/* Golden cards effect */
+.card.golden{border:2px solid #FFD700;box-shadow:0 0 15px rgba(255,215,0,0.4),0 6px 16px rgba(0,0,0,0.4);}
+.card.golden::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,215,0,0.15),transparent 50%);pointer-events:none;z-index:11;border-radius:var(--radius);}
+.card-back.golden{border:2px solid #FFD700;}
+.card-back.golden::after{color:#FFD700;border-color:#FFD700;}
+
+/* Table themes */
+body.theme-dark{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a1a2e 0%, #0f0f1a 40%, #0a0a12 100%);
+}
+body.theme-casino{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a1a 0%, #1a0f0f 40%, #120a0a 100%);
+}
+body.theme-forest{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a3a2e 0%, #0f2a1a 40%, #0a1a12 100%);
+}
+body.theme-ocean{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a2a4a 0%, #0f1a2a 40%, #0a0a1a 100%);
+}
+body.theme-cyber{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a4a 0%, #1a0f2a 40%, #120a1a 100%);
+}
 </style>
 <base target="_blank">
 <base target="_blank">
@@ -2965,6 +3216,7 @@ input[type=text]::placeholder{
 <div class="lang-switcher">
   <button class="players-btn" id="players-btn">👥<span class="players-badge" id="players-badge" style="display:none">0</span></button>
   <button class="quests-btn" id="quests-btn">📋<span class="quests-badge" id="quests-badge" style="display:none">0</span></button>
+  <button class="shop-btn" id="shop-btn">🛒<span class="shop-badge" id="shop-badge" style="display:none">NEW</span></button>
   <button class="lang-btn" id="lang-ru">🇷🇺 RU</button>
   <button class="lang-btn" id="lang-en">🇬🇧 EN</button>
 </div>
@@ -3224,6 +3476,58 @@ input[type=text]::placeholder{
 .bot-diff-btn:hover{background:rgba(255,255,255,0.08);}
 .bot-diff-btn.selected{background:linear-gradient(135deg,#7B68EE,#6a5acd);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(123,104,238,0.3);}
 .bot-diff-label{font-size:11px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px;}
+
+/* Shop */
+.shop-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
+.shop-btn:active{transform:scale(0.9);}
+.shop-badge{position:absolute;top:-4px;right:-4px;background:#F5B800;color:#0a0a1a;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(245,184,0,0.4);}
+.shop-panel{position:fixed;top:70px;right:14px;width:340px;max-height:75vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.shop-panel.show{display:flex;}
+.shop-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.shop-balance{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:10px;padding:4px 10px;}
+.shop-balance-icon{font-size:14px;}
+.shop-balance-value{font-size:12px;font-weight:800;color:#F5B800;}
+.shop-tabs{display:flex;gap:6px;margin-bottom:8px;}
+.shop-tab{flex:1;padding:8px 4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all 0.2s;}
+.shop-tab:hover{background:rgba(255,255,255,0.08);}
+.shop-tab.active{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;border-color:transparent;box-shadow:0 4px 12px rgba(245,184,0,0.3);}
+.shop-items{display:flex;flex-direction:column;gap:8px;}
+.shop-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
+.shop-item:hover{background:rgba(255,255,255,0.06);}
+.shop-item.owned{border-color:rgba(39,165,90,0.3);background:rgba(39,165,90,0.05);}
+.shop-item-icon{font-size:32px;flex-shrink:0;}
+.shop-item-info{flex:1;}
+.shop-item-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.shop-item-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.shop-item-price{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:800;color:#F5B800;}
+.shop-item-btn{padding:6px 14px;border-radius:10px;border:none;font-size:11px;font-weight:800;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+.shop-item-btn.buy{background:linear-gradient(135deg,#F5B800,#d4a017);color:#0a0a1a;}
+.shop-item-btn.buy:active{transform:scale(0.95);}
+.shop-item-btn.owned{background:rgba(39,165,90,0.15);color:#4ade80;cursor:default;}
+.shop-item-btn.equipped{background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;}
+
+/* Golden cards effect */
+.card.golden{border:2px solid #FFD700;box-shadow:0 0 15px rgba(255,215,0,0.4),0 6px 16px rgba(0,0,0,0.4);}
+.card.golden::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,215,0,0.15),transparent 50%);pointer-events:none;z-index:11;border-radius:var(--radius);}
+.card-back.golden{border:2px solid #FFD700;}
+.card-back.golden::after{color:#FFD700;border-color:#FFD700;}
+
+/* Table themes */
+body.theme-dark{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a1a2e 0%, #0f0f1a 40%, #0a0a12 100%);
+}
+body.theme-casino{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a1a 0%, #1a0f0f 40%, #120a0a 100%);
+}
+body.theme-forest{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a3a2e 0%, #0f2a1a 40%, #0a1a12 100%);
+}
+body.theme-ocean{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #1a2a4a 0%, #0f1a2a 40%, #0a0a1a 100%);
+}
+body.theme-cyber{
+  background:radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%),radial-gradient(ellipse at 50% 60%, #2a1a4a 0%, #1a0f2a 40%, #120a1a 100%);
+}
 </style>
 
 <div class="coins-popup" id="coins-popup"></div>
@@ -3242,6 +3546,20 @@ input[type=text]::placeholder{
     <div class="quests-refresh" id="quests-refresh">Обновятся через 12ч</div>
   </div>
   <div id="quests-list"></div>
+</div>
+
+<!-- Shop Panel -->
+<div class="shop-panel" id="shop-panel">
+  <div class="shop-header">
+    <div class="panel-title">🛒 Магазин</div>
+    <div class="shop-balance"><span class="shop-balance-icon">🪙</span><span class="shop-balance-value" id="shop-balance">100</span></div>
+  </div>
+  <div class="shop-tabs">
+    <button class="shop-tab active" onclick="setShopTab('avatars')">Аватарки</button>
+    <button class="shop-tab" onclick="setShopTab('themes')">Темы</button>
+    <button class="shop-tab" onclick="setShopTab('cards')">Карты</button>
+  </div>
+  <div class="shop-items" id="shop-items"></div>
 </div>
 
 <!-- Players Panel -->
