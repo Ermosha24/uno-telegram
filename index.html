@@ -86,7 +86,8 @@ let timerSeconds = 30;
 let chatUnsubscribe = null;
 let myStats = JSON.parse(localStorage.getItem('uno-stats') || '{"xp":0,"games":0,"wins":0}');
 
-let myProfile = JSON.parse(localStorage.getItem('uno-profile') || '{"name":"","avatar":"🐸","elo":1000,"xp":0,"wins":0,"losses":0,"streak":0,"lastBonus":0}');
+let myProfile = JSON.parse(localStorage.getItem('uno-profile') || '{"name":"","avatar":"🐸","elo":1000,"xp":0,"wins":0,"losses":0,"streak":0,"lastBonus":0,"coins":100}');
+if (myProfile.coins === undefined) myProfile.coins = 100;
 
 function loadProfile() {
   if (!myProfile.name) {
@@ -106,9 +107,11 @@ function updateProfileUI() {
   const avEl = document.getElementById('prof-avatar');
   const nmEl = document.getElementById('prof-name');
   const elEl = document.getElementById('prof-elo');
+  const coinsEl = document.getElementById('prof-coins');
   if (avEl) avEl.textContent = myProfile.avatar || '🐸';
   if (nmEl) nmEl.textContent = myProfile.name || (lang==='ru'?'Игрок':'Player');
   if (elEl) elEl.textContent = '⭐ ' + myProfile.elo;
+  if (coinsEl) coinsEl.textContent = myProfile.coins || 0;
 }
 function selAv(el) {
   document.querySelectorAll('.av').forEach(a => a.classList.remove('selected'));
@@ -133,12 +136,15 @@ function checkDaily() {
     let streak = (last === yesterday) ? (myProfile.streak || 0) + 1 : 1;
     myProfile.streak = streak;
     let bonus = 50;
-    if (streak >= 7) { bonus = 300; myProfile.streak = 0; }
+    let coinBonus = 20;
+    if (streak >= 7) { bonus = 300; coinBonus = 100; myProfile.streak = 0; }
     myProfile.xp = (myProfile.xp || 0) + bonus;
+    myProfile.coins = (myProfile.coins || 0) + coinBonus;
     myProfile.lastBonus = Date.now();
     localStorage.setItem('uno-profile', JSON.stringify(myProfile));
     document.getElementById('daily-streak').textContent = (lang==='ru'?'Серия: ':'Streak: ') + streak + (lang==='ru'?' дней':' days');
-    document.getElementById('daily-xp').textContent = '+' + bonus + ' XP';
+    const xpEl = document.getElementById('daily-xp');
+    if (xpEl) xpEl.innerHTML = '+' + bonus + ' XP<div style="font-size:1.2rem;color:#F5B800;font-weight:700;margin-top:4px;">+' + coinBonus + ' 🪙</div>';
     document.getElementById('daily-overlay').style.display = 'flex';
     showXpPopup('+' + bonus + ' XP');
     updateProfileUI();
@@ -146,6 +152,51 @@ function checkDaily() {
 }
 function closeDaily() {
   document.getElementById('daily-overlay').style.display = 'none';
+}
+
+function addCoins(amount, showAnim) {
+  myProfile.coins = (myProfile.coins || 0) + amount;
+  if (myProfile.coins < 0) myProfile.coins = 0;
+  localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+  updateProfileUI();
+  if (showAnim) showCoinsAnim(amount);
+}
+
+function showCoinsAnim(amount) {
+  const el = document.getElementById('coins-popup');
+  if (!el) return;
+  el.textContent = amount > 0 ? '+' + amount + ' 🪙' : (amount < 0 ? amount + ' 🪙' : '0 🪙');
+  el.className = 'coins-popup ' + (amount > 0 ? 'positive' : (amount < 0 ? 'negative' : 'zero'));
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    const float = document.createElement('div');
+    float.className = 'coins-float';
+    float.textContent = amount > 0 ? '+' + amount + '🪙' : (amount + '🪙');
+    float.style.color = amount > 0 ? '#F5B800' : '#E83B3B';
+    float.style.left = '50%';
+    float.style.top = '50%';
+    float.style.transform = 'translate(-50%, -50%)';
+    document.body.appendChild(float);
+    requestAnimationFrame(() => {
+      float.style.transform = 'translate(-50%, -150px)';
+      float.style.opacity = '0';
+    });
+    setTimeout(() => float.remove(), 800);
+  }, 400);
+}
+
+function checkFreeCoins() {
+  if ((myProfile.coins || 0) <= 0) {
+    let lastFree = myProfile.lastFreeCoins || 0;
+    if (Date.now() - lastFree > 3600000) {
+      myProfile.coins = 10;
+      myProfile.lastFreeCoins = Date.now();
+      localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+      updateProfileUI();
+      showToast(lang === 'ru' ? '+10 🪙 бесплатно! Играй дальше!' : '+10 🪙 free! Keep playing!', 'success');
+    }
+  }
 }
 function showXpPopup(x) {
   const el = document.getElementById('xp-popup');
@@ -155,14 +206,17 @@ function showXpPopup(x) {
 }
 function updateElo(won, vsBot) {
   let k = vsBot ? 10 : 25;
-  let change = won ? k : -Math.floor(k / 2);
-  myProfile.elo = Math.max(100, myProfile.elo + change);
+  let eloChange = won ? k : -Math.floor(k / 2);
+  myProfile.elo = Math.max(100, myProfile.elo + eloChange);
   if (won) myProfile.wins = (myProfile.wins || 0) + 1;
   else myProfile.losses = (myProfile.losses || 0) + 1;
   myProfile.xp = (myProfile.xp || 0) + (won ? 50 : 10);
+  let coinChange = won ? (vsBot ? 10 : 25) : -5;
+  myProfile.coins = (myProfile.coins || 0) + coinChange;
+  if (myProfile.coins < 0) myProfile.coins = 0;
   localStorage.setItem('uno-profile', JSON.stringify(myProfile));
   updateProfileUI();
-  return change;
+  return {eloChange: eloChange, coinChange: coinChange};
 }
 
 let savedRoom = localStorage.getItem('uno-saved-room');
@@ -1049,7 +1103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ===== ACHIEVEMENTS & REACTIONS SYSTEM =====
+// ===== ACHIEVEMENTS SYSTEM =====
 const ACHIEVEMENTS = [
   {id:'first_win', name:'Первый шаг', desc:'Победите в первой партии', icon:'🏆', check:(s)=>s.wins>=1},
   {id:'speed_win', name:'Молниеносный', desc:'Победите за 5 ходов', icon:'⚡', check:(s)=>s.fastestWin<=5&&s.fastestWin>0},
@@ -1128,66 +1182,12 @@ function recordGameForAchievements(won, turns, usedWild, opponentCards, isPlus4S
   saveAchStats(s);
 }
 
-// Hook into existing functions
-const originalShowEnd = showEnd;
-showEnd = function(state){
-  if(!state){showScreen('end');return;}
-  const won=state.winner===myRole;
-  const vsBot=state.isBot||(state.guest&&state.guest.name===t('bot'));
-  const ch=updateElo(won,vsBot);
-  document.getElementById('end-icon').textContent=won?'🏆':'😢';
-  document.getElementById('end-title').textContent=won?t('win'):t('lose');
-  document.getElementById('end-sub').textContent=won?t('winSub'):t('loseSub');
-
-  // End stats
-  const statsEl=document.getElementById('end-stats');
-  if(statsEl){
-    const s=getAchStats();
-    statsEl.innerHTML=`<div class="end-stats-box">
-      <div class="stat-highlight">${won?(lang==='ru'?'Победа!':'Victory!'):(lang==='ru'?'Поражение':'Defeat')}</div>
-      <div class="stat-row">⭐ ELO: ${ch>0?'+':''}${ch} (${myProfile.elo})</div>
-      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
-      <div class="stat-row">${lang==='ru'?'Серия побед':'Win streak'}: ${s.streak}</div>
-      <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
-    </div>`;
-  }
-  showScreen('end');
-  stopTimer();
-  if(botTimer){clearTimeout(botTimer);botTimer=null;}
-  if(won){addXP(100);saveLB({name:myProfile.name||myName,xp:myProfile.xp});}
-  else{addXP(10);}
-
-  // Record for achievements
-  const turns = state.discard ? state.discard.length : 0;
-  const usedWild = state[myRole] && state[myRole].hand && state[myRole].hand.some(c=>c.c==='w');
-  const oppCards = state[myRole==='host'?'guest':'host'] ? (state[myRole==='host'?'guest':'host'].hand||[]).length : 0;
-  recordGameForAchievements(won, turns, usedWild, oppCards, false);
-};
-
-// Init listeners
-document.addEventListener('DOMContentLoaded',()=>{
-  const achBtn=document.getElementById('ach-btn');
-  if(achBtn) achBtn.addEventListener('click',toggleAchievements);
-
-  document.querySelectorAll('.reaction-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      sendReaction(btn.dataset.r);
-      btn.style.transform='scale(0.9)';
-      setTimeout(()=>btn.style.transform='scale(1)',100);
-    });
-  });
-});
-
-
-
-
 // ===== PLAYERS ONLINE SYSTEM =====
 let myPlayerId = localStorage.getItem('uno-player-id');
 if (!myPlayerId) {
   myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
   localStorage.setItem('uno-player-id', myPlayerId);
 }
-
 let playersRef = null;
 let playersUnsubscribe = null;
 
@@ -1205,8 +1205,6 @@ function initOnlineStatus() {
     status: 'offline',
     lastSeen: firebase.database.ServerValue.TIMESTAMP
   });
-
-  // Update heartbeat every 30 seconds
   setInterval(() => {
     if (document.visibilityState !== 'hidden') {
       playerRef.update({
@@ -1215,8 +1213,6 @@ function initOnlineStatus() {
       });
     }
   }, 30000);
-
-  // Listen to all players
   listenPlayers();
 }
 
@@ -1228,7 +1224,6 @@ function listenPlayers() {
     snap.forEach(child => {
       const p = child.val();
       if (p && p.name) {
-        // Check if offline for >2 min
         const isAway = p.lastSeen && (Date.now() - p.lastSeen > 120000);
         const status = isAway ? 'away' : (p.status || 'offline');
         players.push({...p, status, id: child.key});
@@ -1243,10 +1238,8 @@ function renderPlayers(players) {
   const badge = document.getElementById('players-badge');
   const count = document.getElementById('players-count');
   if (!list) return;
-
   const online = players.filter(p => p.status === 'online');
   const total = players.length;
-
   if (badge) {
     badge.textContent = online.length;
     badge.style.display = online.length > 0 ? 'block' : 'none';
@@ -1254,18 +1247,14 @@ function renderPlayers(players) {
   if (count) {
     count.textContent = (lang === 'ru' ? 'онлайн: ' : 'online: ') + online.length + ' / ' + total;
   }
-
   list.innerHTML = '';
-
-  // Sort: online first, then by ELO
   players.sort((a, b) => {
     if (a.status === 'online' && b.status !== 'online') return -1;
     if (b.status === 'online' && a.status !== 'online') return 1;
     return (b.elo || 0) - (a.elo || 0);
   });
-
   players.forEach(p => {
-    if (p.id === myPlayerId) return; // Don't show self
+    if (p.id === myPlayerId) return;
     const div = document.createElement('div');
     div.className = 'player-row';
     const statusClass = p.status === 'online' ? 'online' : (p.status === 'away' ? 'away' : 'offline');
@@ -1282,7 +1271,6 @@ function renderPlayers(players) {
     `;
     list.appendChild(div);
   });
-
   if (players.length <= 1) {
     list.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.4);font-size:13px;">${lang === 'ru' ? 'Пока никого нет...' : 'No players yet...'}</div>`;
   }
@@ -1290,7 +1278,6 @@ function renderPlayers(players) {
 
 function invitePlayer(playerId, playerName) {
   if (!myProfile.name) return;
-  // Create invite room
   const inviteCode = genCode();
   db.ref('invites/' + playerId).set({
     from: myProfile.name,
@@ -1300,7 +1287,6 @@ function invitePlayer(playerId, playerName) {
     ts: Date.now()
   });
   showToast((lang === 'ru' ? 'Приглашение отправлено ' : 'Invite sent to ') + playerName, 'success');
-  // Auto-create room
   hostGame();
 }
 
@@ -1310,13 +1296,11 @@ function checkInvites() {
     const inv = snap.val();
     if (inv && inv.code && Date.now() - inv.ts < 60000) {
       showToast((lang === 'ru' ? 'Приглашение от ' : 'Invite from ') + inv.from + '!', 'success');
-      // Auto-join if in lobby
       const lobby = document.getElementById('lobby-screen');
       if (lobby && lobby.classList.contains('active')) {
         document.getElementById('join-code').value = inv.code;
         joinGame();
       }
-      // Remove invite
       db.ref('invites/' + myPlayerId).remove();
     }
   });
@@ -1325,19 +1309,16 @@ function checkInvites() {
 function togglePlayers() {
   const p = document.getElementById('players-panel');
   if (!p) return;
-  if (p.classList.contains('show')) {
-    p.classList.remove('show');
-  } else {
-    p.classList.add('show');
-  }
+  if (p.classList.contains('show')) { p.classList.remove('show'); }
+  else { p.classList.add('show'); }
 }
 
-// Init
+// Init listeners
 document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('players-btn');
-  if (btn) btn.addEventListener('click', togglePlayers);
-
-  // Init online status after profile loaded
+  const achBtn = document.getElementById('ach-btn');
+  if (achBtn) achBtn.addEventListener('click', toggleAchievements);
+  const plBtn = document.getElementById('players-btn');
+  if (plBtn) plBtn.addEventListener('click', togglePlayers);
   setTimeout(() => {
     if (myProfile.name) {
       initOnlineStatus();
@@ -2505,6 +2486,20 @@ input[type=text]::placeholder{
 .av.selected{border-color:#F5B800!important;background:rgba(245,184,0,0.2)!important;transform:scale(1.15);box-shadow:0 0 20px rgba(245,184,0,0.3);}
 #nick-input:focus{border-color:#667eea;box-shadow:0 0 20px rgba(102,126,234,0.3);}
 
+/* Coins System */
+.coins-wrap{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:4px 10px;}
+.coins-icon{font-size:16px;}
+.coins-value{font-size:13px;font-weight:800;color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.3);}
+.coins-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:48px;font-weight:900;z-index:9999;pointer-events:none;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);text-shadow:0 4px 20px rgba(0,0,0,0.5);}
+.coins-popup.show{transform:translate(-50%,-50%) scale(1);}
+.coins-popup.positive{color:#F5B800;}
+.coins-popup.negative{color:#E83B3B;}
+.coins-popup.zero{color:rgba(255,255,255,0.5);}
+.coins-float{position:fixed;font-size:28px;font-weight:800;z-index:9998;pointer-events:none;transition:all 0.8s ease-out;}
+.end-coins-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:18px;font-weight:800;}
+.end-coins-row.positive{color:#F5B800;}
+.end-coins-row.negative{color:#E83B3B;}
+
 /* Achievements & Reactions */
 .ach-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
 .ach-btn:active{transform:scale(0.9);background:rgba(255,255,255,0.1);}
@@ -2526,7 +2521,7 @@ input[type=text]::placeholder{
 .end-stats-box .stat-row{font-size:14px;color:rgba(255,255,255,0.7);margin:4px 0;}
 .end-stats-box .stat-highlight{font-size:18px;font-weight:800;color:#F5B800;margin:8px 0;}
 
-/* Players Online Panel */
+/* Players Online */
 .players-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
 .players-btn:active{transform:scale(0.9);}
 .players-badge{position:absolute;top:-4px;right:-4px;background:#E83B3B;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(232,59,59,0.4);}
@@ -2579,7 +2574,7 @@ input[type=text]::placeholder{
   <span id="prof-avatar" style="font-size:26px;">🐸</span>
   <div style="display:flex;flex-direction:column;align-items:flex-start;">
     <div id="prof-name" style="font-size:13px;font-weight:700;">Игрок</div>
-    <div id="prof-elo" style="font-size:11px;color:#F5B800;font-weight:600;">⭐ 1000</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;"><div id="prof-elo" style="font-size:11px;color:#F5B800;font-weight:600;">⭐ 1000</div><div class="coins-wrap"><span class="coins-icon">🪙</span><span class="coins-value" id="prof-coins">100</span></div></div>
   </div>
 </div>
   <div class="subtitle" id="subtitle">Игра для двоих · Онлайн</div>
@@ -2736,6 +2731,20 @@ input[type=text]::placeholder{
 <!-- XP Popup -->
 <div id="xp-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:linear-gradient(135deg,#667eea,#764ba2);padding:20px 40px;border-radius:20px;font-size:1.6rem;font-weight:900;z-index:120;display:none;box-shadow:0 10px 40px rgba(0,0,0,0.5);animation:xpIn 0.5s ease;">+XP</div>
 <style>@keyframes xpIn{from{transform:translate(-50%,-50%) scale(0);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+/* Coins System */
+.coins-wrap{display:flex;align-items:center;gap:6px;background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:4px 10px;}
+.coins-icon{font-size:16px;}
+.coins-value{font-size:13px;font-weight:800;color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.3);}
+.coins-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:48px;font-weight:900;z-index:9999;pointer-events:none;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);text-shadow:0 4px 20px rgba(0,0,0,0.5);}
+.coins-popup.show{transform:translate(-50%,-50%) scale(1);}
+.coins-popup.positive{color:#F5B800;}
+.coins-popup.negative{color:#E83B3B;}
+.coins-popup.zero{color:rgba(255,255,255,0.5);}
+.coins-float{position:fixed;font-size:28px;font-weight:800;z-index:9998;pointer-events:none;transition:all 0.8s ease-out;}
+.end-coins-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:18px;font-weight:800;}
+.end-coins-row.positive{color:#F5B800;}
+.end-coins-row.negative{color:#E83B3B;}
+
 /* Achievements & Reactions */
 .ach-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
 .ach-btn:active{transform:scale(0.9);background:rgba(255,255,255,0.1);}
@@ -2757,7 +2766,7 @@ input[type=text]::placeholder{
 .end-stats-box .stat-row{font-size:14px;color:rgba(255,255,255,0.7);margin:4px 0;}
 .end-stats-box .stat-highlight{font-size:18px;font-weight:800;color:#F5B800;margin:8px 0;}
 
-/* Players Online Panel */
+/* Players Online */
 .players-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);position:relative;}
 .players-btn:active{transform:scale(0.9);}
 .players-badge{position:absolute;top:-4px;right:-4px;background:#E83B3B;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;box-shadow:0 2px 6px rgba(232,59,59,0.4);}
@@ -2780,6 +2789,7 @@ input[type=text]::placeholder{
 .invite-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
 </style>
 
+<div class="coins-popup" id="coins-popup"></div>
 
 <!-- Achievements Panel -->
 <div class="ach-panel" id="ach-panel">
@@ -2787,7 +2797,6 @@ input[type=text]::placeholder{
   <div id="ach-list"></div>
   <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;text-align:center;color:rgba(255,255,255,0.5);" id="ach-progress">0/8 разблокировано</div>
 </div>
-
 
 <!-- Players Panel -->
 <div class="players-panel" id="players-panel">
@@ -2797,5 +2806,6 @@ input[type=text]::placeholder{
   </div>
   <div id="players-list"></div>
 </div>
+
 </body>
 </html>
