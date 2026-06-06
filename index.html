@@ -1047,6 +1047,138 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
 });
+
+
+// ===== ACHIEVEMENTS & REACTIONS SYSTEM =====
+const ACHIEVEMENTS = [
+  {id:'first_win', name:'Первый шаг', desc:'Победите в первой партии', icon:'🏆', check:(s)=>s.wins>=1},
+  {id:'speed_win', name:'Молниеносный', desc:'Победите за 5 ходов', icon:'⚡', check:(s)=>s.fastestWin<=5&&s.fastestWin>0},
+  {id:'uno_master', name:'UNO-мастер', desc:'3 победы подряд', icon:'👑', check:(s)=>s.streak>=3},
+  {id:'stacker', name:'Стопкер', desc:'Сыграйте +4 на +4', icon:'🥞', check:(s)=>s.stackedPlus4},
+  {id:'pure_skill', name:'Чистая техника', desc:'Победите без Wild-карт', icon:'🎯', check:(s)=>s.noWildWin},
+  {id:'veteran', name:'Ветеран', desc:'Сыграйте 10 партий', icon:'🎖️', check:(s)=>s.games>=10},
+  {id:'elo_1500', name:'Элита', desc:'Достигните 1500 ELO', icon:'💎', check:(s)=>s.elo>=1500},
+  {id:'comeback', name:'Камбэк', desc:'Победите с 1 картой у соперника', icon:'🔥', check:(s)=>s.comebackWin}
+];
+
+function getAchStats(){
+  return JSON.parse(localStorage.getItem('uno-ach-stats') || '{"games":0,"wins":0,"losses":0,"streak":0,"bestStreak":0,"fastestWin":99,"stackedPlus4":false,"noWildWin":false,"comebackWin":false,"elo":1000,"achievements":[],"usedWildInLastGame":false,"turnsInLastGame":0,"opponentCardsInLastGame":0}');
+}
+function saveAchStats(s){localStorage.setItem('uno-ach-stats',JSON.stringify(s));}
+
+function showAchievement(a){
+  const d=document.createElement('div');
+  d.className='ach-popup';
+  d.innerHTML=`<div class="ach-popup-icon">${a.icon}</div><div class="ach-popup-title">Достижение разблокировано!</div><div style="font-size:20px;font-weight:800;margin:4px 0">${a.name}</div><div class="ach-popup-sub">${a.desc}</div>`;
+  document.body.appendChild(d);
+  requestAnimationFrame(()=>d.classList.add('show'));
+  setTimeout(()=>{d.classList.remove('show');setTimeout(()=>d.remove(),400);},3000);
+}
+
+function checkAchievements(s){
+  let changed=false;
+  ACHIEVEMENTS.forEach(a=>{
+    if(!s.achievements.includes(a.id) && a.check(s)){
+      s.achievements.push(a.id);
+      showAchievement(a);
+      changed=true;
+    }
+  });
+  if(changed) saveAchStats(s);
+  return changed;
+}
+
+function renderAchievements(){
+  const s=getAchStats();
+  const list=document.getElementById('ach-list');
+  if(!list) return;
+  list.innerHTML='';
+  ACHIEVEMENTS.forEach(a=>{
+    const unlocked=s.achievements.includes(a.id);
+    const div=document.createElement('div');
+    div.className='ach-item'+(unlocked?' unlocked':'');
+    div.innerHTML=`<div class="ach-icon">${unlocked?a.icon:'🔒'}</div><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div></div>`;
+    list.appendChild(div);
+  });
+  const prog=document.getElementById('ach-progress');
+  if(prog) prog.textContent=(lang==='ru'?'Разблокировано: ':'Unlocked: ')+s.achievements.length+'/'+ACHIEVEMENTS.length;
+}
+
+function toggleAchievements(){
+  const p=document.getElementById('ach-panel');
+  if(!p) return;
+  if(p.classList.contains('show')){p.classList.remove('show');}
+  else{renderAchievements();p.classList.add('show');}
+}
+
+function recordGameForAchievements(won, turns, usedWild, opponentCards, isPlus4Stack){
+  let s=getAchStats();
+  s.games++;
+  if(won){
+    s.wins++; s.streak++; if(s.streak>s.bestStreak) s.bestStreak=s.streak;
+    if(turns>0 && turns < s.fastestWin) s.fastestWin = turns;
+    if(!usedWild) s.noWildWin = true;
+    if(opponentCards >= 1) s.comebackWin = true;
+  } else {
+    s.losses++; s.streak = 0;
+  }
+  if(isPlus4Stack) s.stackedPlus4 = true;
+  s.elo = myProfile.elo || 1000;
+  checkAchievements(s);
+  saveAchStats(s);
+}
+
+// Hook into existing functions
+const originalShowEnd = showEnd;
+showEnd = function(state){
+  if(!state){showScreen('end');return;}
+  const won=state.winner===myRole;
+  const vsBot=state.isBot||(state.guest&&state.guest.name===t('bot'));
+  const ch=updateElo(won,vsBot);
+  document.getElementById('end-icon').textContent=won?'🏆':'😢';
+  document.getElementById('end-title').textContent=won?t('win'):t('lose');
+  document.getElementById('end-sub').textContent=won?t('winSub'):t('loseSub');
+
+  // End stats
+  const statsEl=document.getElementById('end-stats');
+  if(statsEl){
+    const s=getAchStats();
+    statsEl.innerHTML=`<div class="end-stats-box">
+      <div class="stat-highlight">${won?(lang==='ru'?'Победа!':'Victory!'):(lang==='ru'?'Поражение':'Defeat')}</div>
+      <div class="stat-row">⭐ ELO: ${ch>0?'+':''}${ch} (${myProfile.elo})</div>
+      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
+      <div class="stat-row">${lang==='ru'?'Серия побед':'Win streak'}: ${s.streak}</div>
+      <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
+    </div>`;
+  }
+  showScreen('end');
+  stopTimer();
+  if(botTimer){clearTimeout(botTimer);botTimer=null;}
+  if(won){addXP(100);saveLB({name:myProfile.name||myName,xp:myProfile.xp});}
+  else{addXP(10);}
+
+  // Record for achievements
+  const turns = state.discard ? state.discard.length : 0;
+  const usedWild = state[myRole] && state[myRole].hand && state[myRole].hand.some(c=>c.c==='w');
+  const oppCards = state[myRole==='host'?'guest':'host'] ? (state[myRole==='host'?'guest':'host'].hand||[]).length : 0;
+  recordGameForAchievements(won, turns, usedWild, oppCards, false);
+};
+
+// Init listeners
+document.addEventListener('DOMContentLoaded',()=>{
+  const achBtn=document.getElementById('ach-btn');
+  if(achBtn) achBtn.addEventListener('click',toggleAchievements);
+
+  document.querySelectorAll('.reaction-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      sendReaction(btn.dataset.r);
+      btn.style.transform='scale(0.9)';
+      setTimeout(()=>btn.style.transform='scale(1)',100);
+    });
+  });
+});
+
+
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -2206,7 +2338,29 @@ input[type=text]::placeholder{
 .av:hover{background:rgba(255,255,255,0.15)!important;transform:scale(1.1) translateY(-2px);}
 .av.selected{border-color:#F5B800!important;background:rgba(245,184,0,0.2)!important;transform:scale(1.15);box-shadow:0 0 20px rgba(245,184,0,0.3);}
 #nick-input:focus{border-color:#667eea;box-shadow:0 0 20px rgba(102,126,234,0.3);}
+
+/* Achievements & Reactions */
+.ach-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+.ach-btn:active{transform:scale(0.9);background:rgba(255,255,255,0.1);}
+.ach-panel{position:fixed;top:70px;right:14px;width:300px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.ach-panel.show{display:flex;}
+.ach-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
+.ach-item.unlocked{background:rgba(245,184,0,0.08);border-color:rgba(245,184,0,0.2);}
+.ach-icon{font-size:28px;filter:grayscale(1);transition:filter 0.3s;}
+.ach-item.unlocked .ach-icon{filter:grayscale(0);}
+.ach-info{flex:1;}
+.ach-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.ach-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.ach-popup{position:fixed;top:20%;left:50%;transform:translateX(-50%) scale(0);background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px 30px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.3);z-index:9999;font-family:system-ui,sans-serif;text-align:center;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);max-width:300px;pointer-events:none;}
+.ach-popup.show{transform:translateX(-50%) scale(1);}
+.ach-popup-icon{font-size:48px;margin-bottom:8px;}
+.ach-popup-title{font-size:18px;font-weight:bold;margin-bottom:4px;}
+.ach-popup-sub{font-size:13px;opacity:0.9;}
+.end-stats-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px 20px;margin:16px 0;text-align:center;backdrop-filter:blur(10px);}
+.end-stats-box .stat-row{font-size:14px;color:rgba(255,255,255,0.7);margin:4px 0;}
+.end-stats-box .stat-highlight{font-size:18px;font-weight:800;color:#F5B800;margin:8px 0;}
 </style>
+<base target="_blank">
 <base target="_blank">
 </head>
 <body>
@@ -2285,6 +2439,7 @@ input[type=text]::placeholder{
       <button class="icon-btn" id="lb-btn">🏆</button>
       <button class="icon-btn" id="hist-btn">📜</button>
       <button class="icon-btn" id="chat-btn">💬</button>
+      <button class="ach-btn" id="ach-btn">🏅</button>
     </div>
     <div class="turn-badge" id="turn-badge">Ваш ход</div>
     <div class="score-badge" id="score-badge">У соперника: ? карт</div>
@@ -2391,7 +2546,36 @@ input[type=text]::placeholder{
 
 <!-- XP Popup -->
 <div id="xp-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:linear-gradient(135deg,#667eea,#764ba2);padding:20px 40px;border-radius:20px;font-size:1.6rem;font-weight:900;z-index:120;display:none;box-shadow:0 10px 40px rgba(0,0,0,0.5);animation:xpIn 0.5s ease;">+XP</div>
-<style>@keyframes xpIn{from{transform:translate(-50%,-50%) scale(0);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}</style>
+<style>@keyframes xpIn{from{transform:translate(-50%,-50%) scale(0);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+/* Achievements & Reactions */
+.ach-btn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+.ach-btn:active{transform:scale(0.9);background:rgba(255,255,255,0.1);}
+.ach-panel{position:fixed;top:70px;right:14px;width:300px;max-height:70vh;background:rgba(15,15,35,0.95);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;z-index:95;display:none;flex-direction:column;gap:10px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5);}
+.ach-panel.show{display:flex;}
+.ach-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.04);transition:all 0.2s;}
+.ach-item.unlocked{background:rgba(245,184,0,0.08);border-color:rgba(245,184,0,0.2);}
+.ach-icon{font-size:28px;filter:grayscale(1);transition:filter 0.3s;}
+.ach-item.unlocked .ach-icon{filter:grayscale(0);}
+.ach-info{flex:1;}
+.ach-name{font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);}
+.ach-desc{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.ach-popup{position:fixed;top:20%;left:50%;transform:translateX(-50%) scale(0);background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px 30px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.3);z-index:9999;font-family:system-ui,sans-serif;text-align:center;transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);max-width:300px;pointer-events:none;}
+.ach-popup.show{transform:translateX(-50%) scale(1);}
+.ach-popup-icon{font-size:48px;margin-bottom:8px;}
+.ach-popup-title{font-size:18px;font-weight:bold;margin-bottom:4px;}
+.ach-popup-sub{font-size:13px;opacity:0.9;}
+.end-stats-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px 20px;margin:16px 0;text-align:center;backdrop-filter:blur(10px);}
+.end-stats-box .stat-row{font-size:14px;color:rgba(255,255,255,0.7);margin:4px 0;}
+.end-stats-box .stat-highlight{font-size:18px;font-weight:800;color:#F5B800;margin:8px 0;}
+</style>
+
+
+<!-- Achievements Panel -->
+<div class="ach-panel" id="ach-panel">
+  <div class="panel-title">🏅 Достижения</div>
+  <div id="ach-list"></div>
+  <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;text-align:center;color:rgba(255,255,255,0.5);" id="ach-progress">0/8 разблокировано</div>
+</div>
 
 </body>
 </html>
