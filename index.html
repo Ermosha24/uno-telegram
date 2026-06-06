@@ -581,6 +581,8 @@ function backToLobby() {
   stopTimer();
   stopTimer4();
   stopTimer22();
+  localStorage.removeItem('uno-saved-room');
+  savedRoom = null;
   roomCode = null; roomCode4 = null; roomCode22 = null; myRole = null; myIndex4 = -1; myIndex22 = -1; pendingWild = null; pendingWild4 = null; pendingWild22 = null; isBotGame = false; is4Mode = false; is22Mode = false;
   // Принудительно скрываем все экраны
   document.querySelectorAll('.screen').forEach(s=>{
@@ -708,7 +710,7 @@ function joinGame() {
 
   db.ref('rooms/'+code).once('value').then(snap => {
     const data = snap.val();
-    if (!data) { showToast(t('roomNotFound'), 'error'); return; }
+    if (!data) { showToast(t('roomNotFound'), 'error'); localStorage.removeItem('uno-saved-room'); savedRoom = null; document.getElementById('continue-card').style.display = 'none'; return; }
     if (data.phase !== 'waiting') { showToast(t('gameStarted'), 'warning'); return; }
     if (data.guest?.name) { showToast(t('roomFull'), 'warning'); return; }
 
@@ -1046,6 +1048,8 @@ function showEnd(state) {
   }
   showScreen('end');
   stopTimer();
+  localStorage.removeItem('uno-saved-room');
+  savedRoom = null;
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   if (won) { addXP(100); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
   else addXP(10);
@@ -1072,8 +1076,26 @@ document.addEventListener('DOMContentLoaded', () => {
   updateLangUI();
   updateXPBar();
   loadProfile();
-  document.getElementById('continue-card').style.display = savedRoom ? 'block' : 'none';
-  document.getElementById('continue-code').textContent = savedRoom || '';
+  // Автоочистка мёртвых комнат
+  if (savedRoom) {
+    db.ref('rooms/'+savedRoom).once('value').then(snap => {
+      const data = snap.val();
+      if (!data || data.phase === 'ended') {
+        localStorage.removeItem('uno-saved-room');
+        savedRoom = null;
+        document.getElementById('continue-card').style.display = 'none';
+      } else {
+        document.getElementById('continue-card').style.display = 'block';
+        document.getElementById('continue-code').textContent = savedRoom;
+      }
+    }).catch(() => {
+      localStorage.removeItem('uno-saved-room');
+      savedRoom = null;
+      document.getElementById('continue-card').style.display = 'none';
+    });
+  } else {
+    document.getElementById('continue-card').style.display = 'none';
+  }
 
   document.getElementById('join-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase(); });
   document.getElementById('host-btn').addEventListener('click', hostGame);
@@ -2357,6 +2379,8 @@ function showEnd4(state) {
   }
   showScreen('end');
   stopTimer4();
+  localStorage.removeItem('uno-saved-room');
+  savedRoom = null;
   if (won) { addXP(150); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
   else { addXP(10); }
 
@@ -2922,6 +2946,8 @@ function showEnd22(state) {
   }
   showScreen('end');
   stopTimer22();
+  localStorage.removeItem('uno-saved-room');
+  savedRoom = null;
   if (won) { addXP(200); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
   else { addXP(10); }
 
@@ -4553,7 +4579,10 @@ body.theme-cyber{
   <button class="btn btn-purple" id="bot-btn">Играть с ботом</button>
   </div>
   <div class="continue-card" id="continue-card" style="display:none;">
-    <h3 id="continue-title">Продолжить игру</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 id="continue-title" style="margin:0;">Продолжить игру</h3>
+      <button onclick="localStorage.removeItem('uno-saved-room');savedRoom=null;document.getElementById('continue-card').style.display='none';showToast(lang==='ru'?'Кэш очищен':'Cache cleared','success');" style="background:rgba(232,59,59,0.2);border:1px solid rgba(232,59,59,0.4);color:#ff6b6b;border-radius:8px;width:28px;height:28px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✕</button>
+    </div>
     <div class="continue-code" id="continue-code">----</div>
     <button class="btn btn-green" id="continue-btn">Войти в комнату</button>
   </div>
