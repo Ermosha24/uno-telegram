@@ -221,6 +221,7 @@ let savedRoom = localStorage.getItem('uno-saved-room');
 
 let isBotGame = false;
 let botTimer = null;
+let isEndScreenShown = false;
 
 // ── Deck ──
 const COLORS = ['r','b','g','y'];
@@ -284,7 +285,6 @@ function updateLangUI() {
   document.querySelector('[data-color="y"]').textContent = t('yellow');
   document.getElementById('end-title').textContent = t('win');
   document.getElementById('end-sub').textContent = t('winSub');
-  document.getElementById('play-again-btn').textContent = t('playAgain');
   document.getElementById('lb-title').textContent = t('leaderboard');
   document.getElementById('chat-title').textContent = t('quickChat');
   document.getElementById('lang-ru').classList.toggle('active', lang==='ru');
@@ -573,11 +573,12 @@ function botMove(state) {
 
 // ── Lobby ──
 function backToLobby() {
-  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+  isEndScreenShown = false;
+  if (unsubscribe) { try { unsubscribe(); } catch(e) {} unsubscribe = null; }
+  if (chatUnsubscribe) { try { chatUnsubscribe(); } catch(e) {} chatUnsubscribe = null; }
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
-  if (unsub4) { unsub4(); unsub4 = null; }
-  if (unsub22) { unsub22(); unsub22 = null; }
+  if (unsub4) { try { unsub4(); } catch(e) {} unsub4 = null; }
+  if (unsub22) { try { unsub22(); } catch(e) {} unsub22 = null; }
   stopTimer();
   stopTimer4();
   stopTimer22();
@@ -640,7 +641,7 @@ function hostGame() {
     showScreen('waiting');
     updateWaitingUI(state);
     listenRoom(code, state => {
-      if (!state) return;
+      if (!state || isEndScreenShown) return;
       updateWaitingUI(state);
       if (state.phase === 'playing') {
         showScreen('game');
@@ -688,7 +689,7 @@ function startBotGame() {
     showScreen('game');
     renderGame(state);
     listenRoom(code, state => {
-      if (!state) return;
+      if (!state || isEndScreenShown) return;
       if (state.phase === 'playing') {
         showScreen('game');
         renderGame(state);
@@ -1034,25 +1035,61 @@ function missedUno() {
 }
 
 function showEnd(state) {
-  if (!state) { showScreen('end'); return; }
+  if (!state) { 
+    backToLobby(); 
+    return; 
+  }
+
+  // Prevent multiple calls
+  if (isEndScreenShown) return;
+  isEndScreenShown = true;
+
+  stopTimer();
+  stopTimer4();
+  stopTimer22();
+  if (botTimer) { clearTimeout(botTimer); botTimer = null; }
+
   const won = state.winner === myRole;
-  const vsBot = state.isBot || (state.guest && state.guest.name === t('bot'));
-    document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
+
+  // Update profile on win
+  if (won) {
+    myProfile.wins = (myProfile.wins || 0) + 1;
+    myProfile.xp = (myProfile.xp || 0) + 100;
+    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+    updateProfileUI();
+  }
+
+  document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
   document.getElementById('end-title').textContent = won ? t('win') : t('lose');
   document.getElementById('end-sub').textContent = won ? t('winSub') : t('loseSub');
-  // Добавим статистику
+
+  // Stats
   const statsEl = document.getElementById('end-stats');
   if (statsEl) {
-    statsEl.innerHTML = '<div style="font-size:1.1rem;font-weight:700;margin-bottom:8px;">' + (won ? (lang==='ru'?'Победа!':'Victory!') : (lang==='ru'?'Поражение':'Defeat')) + '</div>' +
-      '<div>XP: ' + myProfile.xp + ' | ' + (lang==='ru'?'Побед':'Wins') + ': ' + myProfile.wins + '</div>';
+    const s = getAchStats();
+    if (won) addCoins(10, false);
+
+    statsEl.innerHTML = '<div class="end-stats-box">' +
+      '<div class="stat-highlight">' + (won ? (lang==='ru'?'Победа!':'Victory!') : (lang==='ru'?'Поражение':'Defeat')) + '</div>' +
+      '<div class="stat-row">XP: ' + myProfile.xp + ' | ' + (lang==='ru'?'Побед':'Wins') + ': ' + (myProfile.wins || 0) + '</div>' +
+      '<div class="stat-row">' + (lang==='ru'?'Серия побед':'Win streak') + ': ' + s.streak + '</div>' +
+      '<div class="stat-row">' + (lang==='ru'?'Всего игр':'Total games') + ': ' + s.games + '</div>' +
+      '<div class="stat-row" style="color:#F5B800;font-weight:700;">🪙 ' + (myProfile.coins || 0) + '</div>' +
+      '</div>';
   }
+
   showScreen('end');
-  stopTimer();
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
-  if (botTimer) { clearTimeout(botTimer); botTimer = null; }
+
   if (won) { addXP(100); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
-  else addXP(10);
+  else { addXP(10); }
+
+  // Auto return to lobby after 3 seconds
+  setTimeout(() => {
+    isEndScreenShown = false;
+    backToLobby();
+  }, 3000);
 }
 
 // ── History ──
@@ -1681,6 +1718,13 @@ checkWin = function(state) {
   if (won) {
     state.phase = 'ended';
     state.winner = myRole;
+
+    // Update profile wins and XP
+    myProfile.wins = (myProfile.wins || 0) + 1;
+    myProfile.xp = (myProfile.xp || 0) + 100;
+    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+    updateProfileUI();
+
     addXP(100);
     saveLB({name: myProfile.name || myName, xp: myProfile.xp});
     playSound('win');
@@ -2096,7 +2140,7 @@ function listenRoom4(code) {
   roomRef4 = db.ref('rooms4/' + code);
   unsub4 = roomRef4.on('value', snap => {
     const s = snap.val();
-    if (!s) return;
+    if (!s || isEndScreenShown) return;
     if (s.phase === 'playing') {
       showScreen('game4');
       renderGame4(s);
@@ -2358,8 +2402,27 @@ function checkWin4(state) {
 }
 
 function showEnd4(state) {
-  if (!state) { showScreen('end'); return; }
+  if (!state) { 
+    backToLobby(); 
+    return; 
+  }
+
+  if (isEndScreenShown) return;
+  isEndScreenShown = true;
+
+  stopTimer();
+  stopTimer4();
+  stopTimer22();
+
   const won = state.winner === myIndex4;
+
+  if (won) {
+    myProfile.wins = (myProfile.wins || 0) + 1;
+    myProfile.xp = (myProfile.xp || 0) + 150;
+    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+    updateProfileUI();
+  }
+
   document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
   document.getElementById('end-title').textContent = won ? t('win') : t('lose');
   document.getElementById('end-sub').textContent = won ? t('winSub') : t('loseSub');
@@ -2370,15 +2433,14 @@ function showEnd4(state) {
     const coinRow = `<div class="end-coins-row ${won ? 'positive' : 'negative'}">${won ? '+' : ''}${won ? 10 : -5} 🪙</div>`;
     statsEl.innerHTML = `<div class="end-stats-box">
       <div class="stat-highlight">${won ? (lang==='ru'?'Победа!':'Victory!') : (lang==='ru'?'Поражение':'Defeat')}</div>
-            ${coinRow}
-      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
+      ${coinRow}
+      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins || 0}</div>
       <div class="stat-row">${lang==='ru'?'Серия побед':'Win streak'}: ${s.streak}</div>
       <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
       <div class="stat-row" style="color:#F5B800;font-weight:700;">🪙 ${myProfile.coins || 0}</div>
     </div>`;
   }
   showScreen('end');
-  stopTimer4();
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
   if (won) { addXP(150); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
@@ -2389,6 +2451,11 @@ function showEnd4(state) {
   const oppCards = state.players.reduce((sum, p, i) => i !== myIndex4 ? sum + (p.hand||[]).length : sum, 0);
   recordGameForAchievements(won, turns, usedWild, oppCards, false);
   checkFreeCoins();
+
+  setTimeout(() => {
+    isEndScreenShown = false;
+    backToLobby();
+  }, 3000);
 }
 
 // Bot AI for 4 players
@@ -2586,7 +2653,7 @@ function listenRoom22(code) {
   roomRef22 = db.ref('rooms22/' + code);
   unsub22 = roomRef22.on('value', snap => {
     const s = snap.val();
-    if (!s) return;
+    if (!s || isEndScreenShown) return;
     if (s.phase === 'playing') {
       showScreen('game22');
       renderGame22(s);
@@ -2907,10 +2974,29 @@ function reshuffleDeck22(state) {
 }
 
 function showEnd22(state) {
-  if (!state) { showScreen('end'); return; }
+  if (!state) { 
+    backToLobby(); 
+    return; 
+  }
+
+  if (isEndScreenShown) return;
+  isEndScreenShown = true;
+
+  stopTimer();
+  stopTimer4();
+  stopTimer22();
+
   const winningTeam = getWinningTeam(state);
   const myTeam = TEAMS[myIndex22];
   const won = winningTeam === myTeam;
+
+  if (won) {
+    myProfile.wins = (myProfile.wins || 0) + 1;
+    myProfile.xp = (myProfile.xp || 0) + 200;
+    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+    updateProfileUI();
+  }
+
   // Show team win popup
   const popup = document.getElementById('team-win-popup');
   const sub = document.getElementById('team-win-sub');
@@ -2938,14 +3024,13 @@ function showEnd22(state) {
     statsEl.innerHTML = `<div class="end-stats-box">
       <div class="stat-highlight">${won ? (lang==='ru'?'Победа команды!':'Team victory!') : (lang==='ru'?'Поражение':'Defeat')}</div>
       <div class="stat-row">Команда: ${myTeam === 'red' ? 'Красные' : 'Синие'}</div>
-            ${coinRow}
-      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins}</div>
+      ${coinRow}
+      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins || 0}</div>
       <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
       <div class="stat-row" style="color:#F5B800;font-weight:700;">🪙 ${myProfile.coins || 0}</div>
     </div>`;
   }
   showScreen('end');
-  stopTimer22();
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
   if (won) { addXP(200); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
@@ -2956,6 +3041,11 @@ function showEnd22(state) {
   const oppCards = state.players.reduce((sum, p, i) => TEAMS[i] !== myTeam ? sum + (p.hand||[]).length : sum, 0);
   recordGameForAchievements(won, turns, usedWild, oppCards, false);
   checkFreeCoins();
+
+  setTimeout(() => {
+    isEndScreenShown = false;
+    backToLobby();
+  }, 3000);
 }
 
 // Bot AI for 2v2
@@ -4505,6 +4595,7 @@ body.theme-cyber{
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -4758,9 +4849,10 @@ body.theme-cyber{
     <div class="end-title" id="end-title">Вы победили!</div>
     <div class="end-sub" id="end-sub">Отличная игра</div>
     <div class="end-stats" id="end-stats" style="margin-top:20px;font-size:14px;color:rgba(255,255,255,0.5);text-align:center;"></div>
+    <div style="margin-top:24px;font-size:13px;color:rgba(255,255,255,0.35);animation:pulse 1.5s infinite;" id="auto-lobby-hint">
+      Возвращаемся в лобби...
+    </div>
   </div>
-  <button class="btn btn-yellow" id="rematch-btn" onclick="rematch();" class="btn btn-rematch">🔄 Реванш</button>
-  <button class="btn btn-secondary" id="play-again-btn" onclick="backToLobby(); setTimeout(function(){ if(document.getElementById('lobby-screen').classList.contains('active')){}else{backToLobby();} }, 100);">🏠 В лобби</button>
 </div>
 
 <!-- COLOR PICKER -->
