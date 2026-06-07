@@ -228,6 +228,7 @@ const COLORS = ['r','b','g','y'];
 function buildDeck() {
   const deck = [];
   COLORS.forEach(c => {
+    deck.push({c,v:'0'});
     for(let n=1;n<=9;n++){deck.push({c,v:''+n});deck.push({c,v:''+n});}
     ['skip','rev','+2'].forEach(s=>{deck.push({c,v:s});deck.push({c,v:s});});
   });
@@ -578,13 +579,12 @@ function backToLobby() {
   if (chatUnsubscribe) { try { chatUnsubscribe(); } catch(e) {} chatUnsubscribe = null; }
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   if (unsub4) { try { unsub4(); } catch(e) {} unsub4 = null; }
-  if (unsub22) { try { unsub22(); } catch(e) {} unsub22 = null; }
   stopTimer();
   stopTimer4();
   stopTimer22();
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
-  roomCode = null; roomCode4 = null; roomCode22 = null; myRole = null; myIndex4 = -1; myIndex22 = -1; pendingWild = null; pendingWild4 = null; pendingWild22 = null; isBotGame = false; is4Mode = false; is22Mode = false;
+  roomCode = null; roomCode4 = null; myRole = null; myIndex4 = -1; pendingWild = null; pendingWild4 = null; isBotGame = false; is4Mode = false;
   // Принудительно скрываем все экраны
   document.querySelectorAll('.screen').forEach(s=>{
     s.classList.remove('active');
@@ -621,7 +621,10 @@ function hostGame() {
   const hostHand = deck.splice(0,7);
   const guestHand = deck.splice(0,7);
   let topIdx = 0;
-  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) topIdx++;
+  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) {
+    topIdx++;
+    if (topIdx >= deck.length) { topIdx = 0; break; }
+  }
   const top = deck.splice(topIdx,1)[0];
 
   const state = {
@@ -668,7 +671,10 @@ function startBotGame() {
   const hostHand = deck.splice(0,7);
   const botHand = deck.splice(0,7);
   let topIdx = 0;
-  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) topIdx++;
+  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) {
+    topIdx++;
+    if (topIdx >= deck.length) { topIdx = 0; break; }
+  }
   const top = deck.splice(topIdx,1)[0];
 
   const state = {
@@ -834,15 +840,15 @@ function renderGame(state) {
   const sorted = sortHand(myHand);
   const handEl = document.getElementById('player-hand');
   handEl.innerHTML = '';
-  sorted.forEach((card) => {
-    const realIdx = myHand.indexOf(card);
+  sorted.forEach((card, sortIdx) => {
+    const realIdx = myHand.findIndex(c => c.c === card.c && c.v === card.v);
     const div = document.createElement('div');
     const playable = isMyTurn && canPlay(card, topCard, cc, state.drawStack);
     const inv = getInventory();
   const hasGold = inv.equipped.cardstyle === 'cd_gold';
   div.className = 'card ' + card.c + (playable ? ' playable' : ' not-playable') + (hasGold ? ' golden' : '');
     div.innerHTML = cardHTML(card) + '<div class="swipe-hint">↑</div>';
-    if (playable) div.onclick = () => playCard(realIdx);
+    if (playable) div.onclick = () => playCard(realIdx >= 0 ? realIdx : sortIdx);
     handEl.appendChild(div);
   });
 
@@ -889,7 +895,10 @@ function cardHTML(card) {
 }
 
 function canPlay(card, top, cc, drawStack) {
-  if (drawStack > 0) return card.v === '+2' || card.v === 'wild4';
+  if (drawStack > 0) {
+    // Stack must be answered with same type: +2 on +2, wild4 on wild4
+    return card.v === top.v;
+  }
   if (card.v === 'wild' || card.v === 'wild4') return true;
   if (top.c === 'w') return card.c === cc;
   if (card.c === cc) return true;
@@ -906,6 +915,7 @@ function playCard(idx) {
     if (!state || state.turn !== myRole) return;
     const me = myRole;
     const card = state[me].hand[idx];
+    if (!card) { playSound('error'); return; }
     const top = state.discard[state.discard.length-1];
     if (!canPlay(card, top, state.currentColor, state.drawStack)) { playSound('error'); return; }
 
@@ -968,7 +978,7 @@ function drawCard() {
         state.turn = them;
         state.lastAction = t('drawOne');
       } else {
-        state.lastAction = t('drawOne');
+        state.lastAction = (lang==='ru'?'Взяли — можно сыграть!':'Drew — you may play!');
       }
     }
     state.ts = Date.now();
@@ -997,10 +1007,10 @@ function reshuffleDeck(state) {
 function checkWin(state) {
   const me = myRole;
   if (state[me].hand.length === 0) {
+    // Track used wild BEFORE clearing hand for achievements
+    state._usedWild = state[me].hand && state[me].hand.some(c => c.c === 'w');
     state.phase = 'ended';
     state.winner = myRole;
-    addXP(100);
-    saveLB({name: myProfile.name || myName, xp: myProfile.xp});
     playSound('win');
     confetti();
   }
@@ -1716,6 +1726,8 @@ checkWin = function(state) {
   const me = myRole;
   const won = state[me].hand.length === 0;
   if (won) {
+    // Track used wild BEFORE hand is cleared
+    state._usedWild = state[me] && state[me].hand && state[me].hand.some(c => c.c === 'w');
     state.phase = 'ended';
     state.winner = myRole;
 
@@ -1725,8 +1737,6 @@ checkWin = function(state) {
     localStorage.setItem('uno-profile', JSON.stringify(myProfile));
     updateProfileUI();
 
-    addXP(100);
-    saveLB({name: myProfile.name || myName, xp: myProfile.xp});
     playSound('win');
     confetti();
 
@@ -1737,9 +1747,6 @@ checkWin = function(state) {
     const turns = state.discard ? state.discard.length : 0;
     if (turns <= 8) updateQuestProgress('fastWins');
 
-    const usedWild = state[me] && state[me].hand && state[me].hand.some(c => c.c === 'w');
-    if (!usedWild) updateQuestProgress('noWildWins');
-
     // Track same color quest (check played cards)
     const colorCounts = {};
     state.discard.forEach(c => { if (c.c !== 'w') colorCounts[c.c] = (colorCounts[c.c] || 0) + 1; });
@@ -1749,9 +1756,6 @@ checkWin = function(state) {
     // Track +4 plays
     const plus4Count = state.discard.filter(c => c.v === 'wild4').length;
     if (plus4Count >= 2) updateQuestProgress('plus4Plays', plus4Count);
-
-    // Track draw cards
-    // This is harder to track accurately, skip for now
   }
 };
 
@@ -2112,7 +2116,10 @@ function host4Game() {
     });
   }
   let topIdx = 0;
-  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) topIdx++;
+  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) {
+    topIdx++;
+    if (topIdx >= deck.length) { topIdx = 0; break; }
+  }
   const top = deck.splice(topIdx,1)[0];
 
   const state = {
@@ -2261,13 +2268,13 @@ function renderHand4(hand, id, isBack, isVertical) {
 function renderMyHand4(sorted, originalHand, topCard, cc, drawStack, isMyTurn) {
   const el = document.getElementById('player-hand-4');
   el.innerHTML = '';
-  sorted.forEach((card) => {
-    const realIdx = originalHand.indexOf(card);
+  sorted.forEach((card, sortIdx) => {
+    const realIdx = originalHand.findIndex(c => c.c === card.c && c.v === card.v);
     const div = document.createElement('div');
     const playable = isMyTurn && canPlay(card, topCard, cc, drawStack);
     div.className = 'card-4 ' + card.c + (playable ? ' playable' : ' not-playable');
     div.innerHTML = cardHTML4(card);
-    if (playable) div.onclick = () => playCard4(realIdx);
+    if (playable) div.onclick = () => playCard4(realIdx >= 0 ? realIdx : sortIdx);
     el.appendChild(div);
   });
   document.getElementById('hand-label-4').textContent = t('yourCards') + ' (' + originalHand.length + ')';
@@ -2290,6 +2297,7 @@ function playCard4(idx) {
     if (!state || state.currentPlayer !== myIndex4) return;
     const me = state.players[myIndex4];
     const card = me.hand[idx];
+    if (!card) { playSound('error'); return; }
     const top = state.discard[state.discard.length-1];
     if (!canPlay(card, top, state.currentColor, state.drawStack)) { playSound('error'); return; }
 
@@ -2361,6 +2369,8 @@ function nextPlayer4(state) {
 
 function applyEffect4(state, card) {
   if (card.v === 'skip') {
+    // Skip next player: move 2 steps
+    state.currentPlayer = nextPlayer4(state);
     state.currentPlayer = nextPlayer4(state);
     state.lastAction = state.players[state.currentPlayer].name + ' ' + t('skip');
     shakeScreen();
@@ -2392,10 +2402,9 @@ function reshuffleDeck4(state) {
 function checkWin4(state) {
   const me = state.players[myIndex4];
   if (me.hand.length === 0) {
+    state._usedWild = me.hand && me.hand.some(c => c.c === 'w');
     state.phase = 'ended';
     state.winner = myIndex4;
-    addXP(150);
-    saveLB({name: myProfile.name || myName, xp: myProfile.xp});
     playSound('win');
     confetti();
   }
@@ -2447,7 +2456,7 @@ function showEnd4(state) {
   else { addXP(10); }
 
   const turns = state.discard ? state.discard.length : 0;
-  const usedWild = me && me.hand && me.hand.some(c=>c.c==='w');
+  const usedWild = state._usedWild || false;
   const oppCards = state.players.reduce((sum, p, i) => i !== myIndex4 ? sum + (p.hand||[]).length : sum, 0);
   recordGameForAchievements(won, turns, usedWild, oppCards, false);
   checkFreeCoins();
@@ -2591,629 +2600,6 @@ function callUno4() {
 }
 
 
-// ===== 2v2 TEAM MODE =====
-const TEAMS = {0: 'red', 1: 'blue', 2: 'red', 3: 'blue'};
-const TEAM_COLORS = {red: '#E83B3B', blue: '#2B7FD4'};
-const TEAM_NAMES = {red: 'Красные', blue: 'Синие'};
-
-let myIndex22 = -1;
-let roomCode22 = null;
-let roomRef22 = null;
-let unsub22 = null;
-let is22Mode = false;
-let pendingWild22 = null;
-let partnerCardIdx22 = null;
-
-function host22Game() {
-  const code = genCode();
-  roomCode22 = code;
-  myIndex22 = 0;
-  is22Mode = true;
-  localStorage.setItem('uno-saved-room', code);
-
-  const deck = buildDeck();
-  const players = [];
-  for (let i = 0; i < 4; i++) {
-    players.push({
-      id: i === 0 ? myPlayerId : 'bot_' + i,
-      name: i === 0 ? myProfile.name : (t('bot') + ' ' + i),
-      avatar: i === 0 ? myProfile.avatar : '🤖',
-      hand: deck.splice(0, 7),
-      isBot: i !== 0,
-      team: TEAMS[i],
-      out: false
-    });
-  }
-  let topIdx = 0;
-  while(deck[topIdx] && (deck[topIdx].v==='wild' || deck[topIdx].v==='wild4')) topIdx++;
-  const top = deck.splice(topIdx,1)[0];
-
-  const state = {
-    code, phase:'playing', maxPlayers:4, mode:'2v2',
-    players, deck, discard:[top],
-    currentColor: top.c,
-    currentPlayer: 0,
-    direction: 1,
-    drawStack:0,
-    lastAction:'',
-    winner:null,
-    is22:true,
-    ts: Date.now()
-  };
-
-  db.ref('rooms22/' + code).set(state).then(() => {
-    showScreen('game22');
-    renderGame22(state);
-    listenRoom22(code);
-  });
-}
-
-function listenRoom22(code) {
-  if (unsub22) unsub22();
-  roomRef22 = db.ref('rooms22/' + code);
-  unsub22 = roomRef22.on('value', snap => {
-    const s = snap.val();
-    if (!s || isEndScreenShown) return;
-    if (s.phase === 'playing') {
-      showScreen('game22');
-      renderGame22(s);
-      if (s.players[s.currentPlayer] && s.players[s.currentPlayer].isBot && !s.players[s.currentPlayer].out) {
-        botMove22(s);
-      }
-    }
-    if (s.phase === 'ended') showEnd22(s);
-  });
-}
-
-function renderGame22(state) {
-  if (!state || state.phase === 'ended') return;
-  if (myIndex22 < 0) return;
-
-  const me = state.players[myIndex22];
-  if (!me) return;
-
-  const topIdx = (myIndex22 + 2) % 4;
-  const leftIdx = (myIndex22 + 1) % 4;
-  const rightIdx = (myIndex22 + 3) % 4;
-
-  const topP = state.players[topIdx];
-  const leftP = state.players[leftIdx];
-  const rightP = state.players[rightIdx];
-
-  // Update player info with team badges
-  document.getElementById('top-name-22').innerHTML = topP.name + ' <span class="team-badge team-' + topP.team + '">' + (topP.team === 'red' ? 'КРС' : 'СИН') + '</span>';
-  document.getElementById('top-avatar-22').textContent = topP.out ? '✅' : topP.avatar;
-  document.getElementById('top-cards-22').textContent = topP.out ? (lang==='ru'?'Вышел':'Out') : topP.hand.length + ' ' + (lang==='ru'?'карт':'cards');
-
-  document.getElementById('left-name-22').innerHTML = leftP.name + ' <span class="team-badge team-' + leftP.team + '">' + (leftP.team === 'red' ? 'КРС' : 'СИН') + '</span>';
-  document.getElementById('left-avatar-22').textContent = leftP.out ? '✅' : leftP.avatar;
-  document.getElementById('left-cards-22').textContent = leftP.out ? (lang==='ru'?'Вышел':'Out') : leftP.hand.length + ' ' + (lang==='ru'?'карт':'cards');
-
-  document.getElementById('right-name-22').innerHTML = rightP.name + ' <span class="team-badge team-' + rightP.team + '">' + (rightP.team === 'red' ? 'КРС' : 'СИН') + '</span>';
-  document.getElementById('right-avatar-22').textContent = rightP.out ? '✅' : rightP.avatar;
-  document.getElementById('right-cards-22').textContent = rightP.out ? (lang==='ru'?'Вышел':'Out') : rightP.hand.length + ' ' + (lang==='ru'?'карт':'cards');
-
-  // Active player highlight
-  document.getElementById('player-top-22').classList.toggle('player-active', state.currentPlayer === topIdx && !topP.out);
-  document.getElementById('player-left-22').classList.toggle('player-active', state.currentPlayer === leftIdx && !leftP.out);
-  document.getElementById('player-right-22').classList.toggle('player-active', state.currentPlayer === rightIdx && !rightP.out);
-  document.getElementById('player-bottom-22').classList.toggle('player-active', state.currentPlayer === myIndex22 && !me.out);
-
-  // Turn badge
-  const isMyTurn = state.currentPlayer === myIndex22 && !me.out;
-  const badge = document.getElementById('turn-badge-22');
-  if (isMyTurn) {
-    badge.textContent = t('yourTurn');
-    badge.className = 'turn-badge your-turn';
-  } else {
-    const cp = state.players[state.currentPlayer];
-    badge.textContent = (cp.out ? (lang==='ru'?'Пропуск':'Skip') : cp.name) + ' ' + (lang==='ru'?'ходит':'plays');
-    badge.className = 'turn-badge their-turn';
-  }
-
-  // Color dot
-  const dots = {r:'#E83030',b:'#2B7FD4',g:'#27A55A',y:'#F5B800',w:'#555'};
-  document.getElementById('color-dot-22').style.background = dots[state.currentColor] || '#555';
-  document.getElementById('color-dot-22').style.boxShadow = `0 0 20px ${dots[state.currentColor] || '#555'}80`;
-
-  // Top card
-  const topCard = state.discard[state.discard.length-1];
-  const tcEl = document.getElementById('top-card-22');
-  tcEl.className = 'top-card-4 ' + (topCard.c === 'w' && state.currentColor ? state.currentColor : topCard.c);
-  tcEl.innerHTML = cardHTML4(topCard);
-
-  // Draw button
-  const db22 = document.getElementById('draw-btn-22');
-  isMyTurn ? db22.classList.remove('disabled') : db22.classList.add('disabled');
-
-  // Status
-  const msgs = [];
-  if (state.drawStack > 0) msgs.push(`${t('stack')}: +${state.drawStack}`);
-  if (state.lastAction) msgs.push(state.lastAction);
-  document.getElementById('status-msg-22').textContent = msgs.join(' · ');
-
-  // Opponent hands
-  renderHand4(topP.hand, 'top-hand-22', true, false);
-  renderHand4(leftP.hand, 'left-hand-22', true, true);
-  renderHand4(rightP.hand, 'right-hand-22', true, true);
-
-  // My hand
-  const topC = state.discard[state.discard.length-1];
-  const cc = state.currentColor;
-  const sorted = sortHand(me.hand);
-  renderMyHand22(sorted, me.hand, topC, cc, state.drawStack, isMyTurn);
-
-  // Partner button - show if partner has 1 card and I have playable card
-  const partnerIdx = (myIndex22 + 2) % 4;
-  const partner = state.players[partnerIdx];
-  const partnerBtn = document.getElementById('partner-btn-22');
-  const partnerHint = document.getElementById('partner-hint-22');
-
-  if (!me.out && !partner.out && partner.hand.length === 1 && isMyTurn) {
-    const playable = sorted.some(card => canPlay(card, topC, cc, state.drawStack));
-    if (playable) {
-      partnerBtn.style.display = 'inline-block';
-      partnerHint.style.display = 'block';
-    } else {
-      partnerBtn.style.display = 'none';
-      partnerHint.style.display = 'none';
-    }
-  } else {
-    partnerBtn.style.display = 'none';
-    partnerHint.style.display = 'none';
-  }
-
-  // UNO button
-  const unoBtn = document.getElementById('uno-btn-22');
-  if (isMyTurn && me.hand.length === 2) {
-    unoBtn.classList.add('show');
-    unoBtn.classList.add('pulse');
-  } else {
-    unoBtn.classList.remove('show');
-    unoBtn.classList.remove('pulse');
-  }
-
-  // Timer
-  if (isMyTurn && state.phase === 'playing') startTimer22();
-  else stopTimer22();
-}
-
-function renderMyHand22(sorted, originalHand, topCard, cc, drawStack, isMyTurn) {
-  const el = document.getElementById('player-hand-22');
-  el.innerHTML = '';
-  sorted.forEach((card) => {
-    const realIdx = originalHand.indexOf(card);
-    const div = document.createElement('div');
-    const playable = isMyTurn && canPlay(card, topCard, cc, drawStack);
-    div.className = 'card-4 ' + card.c + (playable ? ' playable' : ' not-playable');
-    div.innerHTML = cardHTML4(card);
-    if (playable) div.onclick = () => playCard22(realIdx);
-    el.appendChild(div);
-  });
-  document.getElementById('hand-label-22').textContent = t('yourCards') + ' (' + originalHand.length + ')';
-}
-
-function playCard22(idx) {
-  if (!roomCode22) return;
-  db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-    const state = snap.val();
-    if (!state || state.currentPlayer !== myIndex22) return;
-    const me = state.players[myIndex22];
-    if (me.out) return;
-    const card = me.hand[idx];
-    const top = state.discard[state.discard.length-1];
-    if (!canPlay(card, top, state.currentColor, state.drawStack)) { playSound('error'); return; }
-
-    playSound('play');
-    me.hand.splice(idx, 1);
-    state.discard.push(card);
-    state.ts = Date.now();
-
-    if (card.v === 'wild' || card.v === 'wild4') {
-      pendingWild22 = {state, card, idx};
-      document.getElementById('color-picker').classList.add('show');
-      return;
-    }
-
-    if (card.c !== 'w') state.currentColor = card.c;
-
-    // Check if out (0 cards)
-    if (me.hand.length === 0) {
-      me.out = true;
-      state.lastAction = me.name + ' ' + (lang==='ru'?'вышел!':'is out!');
-      // Check team win
-      if (checkTeamWin(state)) {
-        state.phase = 'ended';
-        state.winner = myIndex22;
-        db.ref('rooms22/' + roomCode22).set(state);
-        return;
-      }
-      // Skip to next active player
-      state.currentPlayer = nextActivePlayer22(state);
-      db.ref('rooms22/' + roomCode22).set(state);
-      return;
-    }
-
-    applyEffect22(state, card);
-    db.ref('rooms22/' + roomCode22).set(state);
-  });
-}
-
-function giveToPartner(idx) {
-  if (!roomCode22) return;
-  db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-    const state = snap.val();
-    if (!state || state.currentPlayer !== myIndex22) return;
-    const me = state.players[myIndex22];
-    const partnerIdx = (myIndex22 + 2) % 4;
-    const partner = state.players[partnerIdx];
-    if (!partner || partner.out) return;
-
-    const card = me.hand[idx];
-    me.hand.splice(idx, 1);
-    partner.hand.push(card);
-    state.lastAction = me.name + ' → ' + partner.name + ' (' + (lang==='ru'?'подкинул':'gave') + ' ' + card.v + ')';
-    state.ts = Date.now();
-    state.currentPlayer = nextActivePlayer22(state);
-    db.ref('rooms22/' + roomCode22).set(state);
-    showToast(lang==='ru'?'Подкинул партнёру!':'Gave to partner!', 'success');
-  });
-}
-
-function pickColor22(c) {
-  document.getElementById('color-picker').classList.remove('show');
-  if (!pendingWild22) return;
-  const {state, card} = pendingWild22;
-  pendingWild22 = null;
-  state.currentColor = c;
-  if (card.v === 'wild4') { state.drawStack += 4; }
-
-  const me = state.players[myIndex22];
-  if (me.hand.length === 0) {
-    me.out = true;
-    if (checkTeamWin(state)) {
-      state.phase = 'ended';
-      state.winner = myIndex22;
-      db.ref('rooms22/' + roomCode22).set(state);
-      return;
-    }
-  }
-
-  applyEffect22(state, card);
-  db.ref('rooms22/' + roomCode22).set(state);
-  rainbowFlash();
-}
-
-function drawCard22() {
-  if (!roomCode22) return;
-  db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-    const state = snap.val();
-    if (!state || state.currentPlayer !== myIndex22) return;
-    const me = state.players[myIndex22];
-    if (me.out) return;
-
-    playSound('draw');
-    if (state.drawStack > 0) {
-      for (let i = 0; i < state.drawStack; i++) {
-        if (state.deck.length === 0) reshuffleDeck22(state);
-        me.hand.push(state.deck.pop());
-      }
-      state.drawStack = 0;
-      state.lastAction = t('tookCards') + ' +' + state.drawStack;
-    } else {
-      if (state.deck.length === 0) reshuffleDeck22(state);
-      me.hand.push(state.deck.pop());
-      state.lastAction = t('drawOne');
-    }
-    state.currentPlayer = nextActivePlayer22(state);
-    state.ts = Date.now();
-    db.ref('rooms22/' + roomCode22).set(state);
-  });
-}
-
-function nextActivePlayer22(state) {
-  let next = state.currentPlayer + state.direction;
-  if (next < 0) next = 3;
-  if (next > 3) next = 0;
-  // Skip players who are out
-  let attempts = 0;
-  while (state.players[next] && state.players[next].out && attempts < 4) {
-    next += state.direction;
-    if (next < 0) next = 3;
-    if (next > 3) next = 0;
-    attempts++;
-  }
-  return next;
-}
-
-function checkTeamWin(state) {
-  const redTeam = [0, 2].filter(i => state.players[i] && state.players[i].out);
-  const blueTeam = [1, 3].filter(i => state.players[i] && state.players[i].out);
-  if (redTeam.length === 2) return true;
-  if (blueTeam.length === 2) return true;
-  return false;
-}
-
-function getWinningTeam(state) {
-  const redOut = [0, 2].every(i => state.players[i] && state.players[i].out);
-  const blueOut = [1, 3].every(i => state.players[i] && state.players[i].out);
-  if (redOut) return 'red';
-  if (blueOut) return 'blue';
-  return null;
-}
-
-function applyEffect22(state, card) {
-  const me = state.players[state.currentPlayer];
-  if (card.v === 'skip') {
-    state.currentPlayer = nextActivePlayer22(state);
-    state.lastAction = state.players[state.currentPlayer].name + ' ' + t('skip');
-    shakeScreen();
-  } else if (card.v === 'rev') {
-    state.direction *= -1;
-    state.lastAction = t('reverse');
-    state.currentPlayer = nextActivePlayer22(state);
-  } else if (card.v === '+2') {
-    state.drawStack += 2;
-    state.currentPlayer = nextActivePlayer22(state);
-    state.lastAction = t('plus2') + ' ' + state.players[state.currentPlayer].name;
-  } else if (card.v === 'wild4') {
-    state.currentPlayer = nextActivePlayer22(state);
-    state.lastAction = t('plus4') + ' ' + state.players[state.currentPlayer].name;
-    rainbowFlash();
-  } else {
-    state.currentPlayer = nextActivePlayer22(state);
-    state.lastAction = '';
-  }
-}
-
-function reshuffleDeck22(state) {
-  const top = state.discard.pop();
-  state.deck = shuffle(state.discard);
-  state.discard = [top];
-  showToast('Deck reshuffled!', 'info');
-}
-
-function showEnd22(state) {
-  if (!state) { 
-    backToLobby(); 
-    return; 
-  }
-
-  if (isEndScreenShown) return;
-  isEndScreenShown = true;
-
-  stopTimer();
-  stopTimer4();
-  stopTimer22();
-
-  const winningTeam = getWinningTeam(state);
-  const myTeam = TEAMS[myIndex22];
-  const won = winningTeam === myTeam;
-
-  if (won) {
-    myProfile.wins = (myProfile.wins || 0) + 1;
-    myProfile.xp = (myProfile.xp || 0) + 200;
-    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
-    updateProfileUI();
-  }
-
-  // Show team win popup
-  const popup = document.getElementById('team-win-popup');
-  const sub = document.getElementById('team-win-sub');
-  const playersDiv = document.getElementById('team-win-players');
-
-  if (popup && won) {
-    sub.textContent = (winningTeam === 'red' ? 'Красные' : 'Синие') + ' ' + (lang==='ru'?'победили!':'won!');
-    const teamMembers = [0,1,2,3].filter(i => TEAMS[i] === winningTeam).map(i => {
-      const p = state.players[i];
-      return '<div class="team-win-avatar">' + (p ? p.avatar : '🤖') + '</div>';
-    }).join('');
-    playersDiv.innerHTML = teamMembers;
-    popup.classList.add('show');
-    setTimeout(() => popup.classList.remove('show'), 4000);
-  }
-
-  document.getElementById('end-icon').textContent = won ? '🏆' : '😢';
-  document.getElementById('end-title').textContent = won ? (lang==='ru'?'Победа команды!':'Team victory!') : t('lose');
-  document.getElementById('end-sub').textContent = won ? (lang==='ru'?'Отличная командная работа!':'Great teamwork!') : t('loseSub');
-
-  const statsEl = document.getElementById('end-stats');
-  if (statsEl) {
-    const s = getAchStats();
-    const coinRow = `<div class="end-coins-row ${won ? 'positive' : 'negative'}">${won ? '+' : ''}${won ? 10 : -5} 🪙</div>`;
-    statsEl.innerHTML = `<div class="end-stats-box">
-      <div class="stat-highlight">${won ? (lang==='ru'?'Победа команды!':'Team victory!') : (lang==='ru'?'Поражение':'Defeat')}</div>
-      <div class="stat-row">Команда: ${myTeam === 'red' ? 'Красные' : 'Синие'}</div>
-      ${coinRow}
-      <div class="stat-row">XP: ${myProfile.xp} | ${lang==='ru'?'Побед':'Wins'}: ${myProfile.wins || 0}</div>
-      <div class="stat-row">${lang==='ru'?'Всего игр':'Total games'}: ${s.games}</div>
-      <div class="stat-row" style="color:#F5B800;font-weight:700;">🪙 ${myProfile.coins || 0}</div>
-    </div>`;
-  }
-  showScreen('end');
-  localStorage.removeItem('uno-saved-room');
-  savedRoom = null;
-  if (won) { addXP(200); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
-  else { addXP(10); }
-
-  const turns = state.discard ? state.discard.length : 0;
-  const usedWild = me && me.hand && me.hand.some(c=>c.c==='w');
-  const oppCards = state.players.reduce((sum, p, i) => TEAMS[i] !== myTeam ? sum + (p.hand||[]).length : sum, 0);
-  recordGameForAchievements(won, turns, usedWild, oppCards, false);
-  checkFreeCoins();
-
-  setTimeout(() => {
-    isEndScreenShown = false;
-    backToLobby();
-  }, 3000);
-}
-
-// Bot AI for 2v2
-function botMove22(state) {
-  if (!state || state.phase !== 'playing') return;
-  const botIdx = state.currentPlayer;
-  const bot = state.players[botIdx];
-  if (!bot || !bot.isBot || bot.out) return;
-
-  setTimeout(() => {
-    db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-      const s = snap.val();
-      if (!s || s.currentPlayer !== botIdx || s.phase !== 'playing') return;
-      const botHand = s.players[botIdx].hand || [];
-      const top = s.discard[s.discard.length-1];
-      const cc = s.currentColor;
-
-      const playable = [];
-      botHand.forEach((card, idx) => {
-        if (canPlay(card, top, cc, s.drawStack)) playable.push({card, idx});
-      });
-
-      // Check if partner is about to win (1 card) - try to give card if possible
-      const partnerIdx = (botIdx + 2) % 4;
-      const partner = s.players[partnerIdx];
-      if (partner && !partner.out && partner.hand.length === 1 && playable.length > 1) {
-        // Give a non-essential card to partner
-        const giveCard = playable.find(({card}) => card.v !== 'wild4' && card.v !== 'wild');
-        if (giveCard) {
-          botHand.splice(giveCard.idx, 1);
-          partner.hand.push(giveCard.card);
-          s.lastAction = bot.name + ' → ' + partner.name + ' (' + (lang==='ru'?'подкинул':'gave') + ')';
-          s.ts = Date.now();
-          s.currentPlayer = nextActivePlayer22(s);
-          db.ref('rooms22/' + roomCode22).set(s);
-          return;
-        }
-      }
-
-      if (playable.length > 0) {
-        let pick = null;
-        if (s.drawStack > 0) {
-          pick = playable.find(({card}) => card.v === '+2') || playable.find(({card}) => card.v === 'wild4');
-        }
-        if (!pick) pick = playable.find(({card}) => card.v === '+2');
-        if (!pick) pick = playable.find(({card}) => card.v === 'skip');
-        if (!pick) pick = playable.find(({card}) => card.v === 'rev');
-        if (!pick) pick = playable.find(({card}) => card.v === 'wild4');
-        if (!pick) pick = playable.find(({card}) => card.v === 'wild');
-        if (!pick) pick = playable[Math.floor(Math.random() * playable.length)];
-
-        const card = pick.card;
-        botHand.splice(pick.idx, 1);
-        s.discard.push(card);
-
-        if (card.v === 'wild' || card.v === 'wild4') {
-          s.currentColor = botChooseColor(botHand);
-          if (card.v === 'wild4') s.drawStack += 4;
-        } else if (card.c !== 'w') {
-          s.currentColor = card.c;
-        }
-
-        if (botHand.length === 0) {
-          bot.out = true;
-          s.lastAction = bot.name + ' ' + (lang==='ru'?'вышел!':'is out!');
-          if (checkTeamWin(s)) {
-            s.phase = 'ended';
-            s.winner = botIdx;
-            db.ref('rooms22/' + roomCode22).set(s);
-            return;
-          }
-          s.currentPlayer = nextActivePlayer22(s);
-          db.ref('rooms22/' + roomCode22).set(s);
-          return;
-        }
-
-        applyEffect22(s, card);
-        s.ts = Date.now();
-        db.ref('rooms22/' + roomCode22).set(s);
-      } else {
-        if (s.drawStack > 0) {
-          for (let i = 0; i < s.drawStack; i++) {
-            if (s.deck.length === 0) reshuffleDeck22(s);
-            botHand.push(s.deck.pop());
-          }
-          s.drawStack = 0;
-          s.lastAction = bot.name + ' ' + t('tookCards') + ' +' + s.drawStack;
-        } else {
-          if (s.deck.length === 0) reshuffleDeck22(s);
-          botHand.push(s.deck.pop());
-          s.lastAction = bot.name + ' ' + t('drawOne');
-        }
-        s.currentPlayer = nextActivePlayer22(s);
-        s.ts = Date.now();
-        db.ref('rooms22/' + roomCode22).set(s);
-      }
-    });
-  }, 1000 + Math.random() * 1500);
-}
-
-function startTimer22() {
-  stopTimer22();
-  timerSeconds = 30;
-  const el = document.getElementById('timer-bar-22');
-  if (el) {
-    el.style.width = '100%';
-    el.className = 'timer-bar';
-    timerInterval = setInterval(() => {
-      timerSeconds--;
-      const pct = (timerSeconds/30)*100;
-      el.style.width = pct+'%';
-      if (timerSeconds <= 10) el.classList.add('urgent');
-      if (timerSeconds <= 0) { stopTimer22(); drawCard22(); }
-    }, 1000);
-  }
-}
-
-function stopTimer22() {
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = null;
-}
-
-// Init listeners for 2v2
-document.addEventListener('DOMContentLoaded', () => {
-  const teamBtn = document.getElementById('team-btn');
-  if (teamBtn) teamBtn.addEventListener('click', host22Game);
-
-  const drawBtn22 = document.getElementById('draw-btn-22');
-  if (drawBtn22) drawBtn22.addEventListener('click', drawCard22);
-
-  const unoBtn22 = document.getElementById('uno-btn-22');
-  if (unoBtn22) unoBtn22.addEventListener('click', callUno22);
-
-  const partnerBtn = document.getElementById('partner-btn-22');
-  if (partnerBtn) partnerBtn.addEventListener('click', () => {
-    // Show partner selection - for now just give first playable card
-    if (!roomCode22) return;
-    db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-      const state = snap.val();
-      if (!state || state.currentPlayer !== myIndex22) return;
-      const me = state.players[myIndex22];
-      const partnerIdx = (myIndex22 + 2) % 4;
-      const partner = state.players[partnerIdx];
-      if (!partner || partner.out) return;
-
-      // Find first non-wild card to give
-      const giveIdx = me.hand.findIndex(c => c.c !== 'w');
-      if (giveIdx >= 0) {
-        giveToPartner(giveIdx);
-      } else if (me.hand.length > 0) {
-        giveToPartner(0);
-      }
-    });
-  });
-});
-
-function callUno22() {
-  if (!roomCode22) return;
-  playSound('uno');
-  showToast(t('uno'), 'success');
-  db.ref('rooms22/' + roomCode22).once('value').then(snap => {
-    const s = snap.val();
-    if (!s) return;
-    s.lastAction = s.players[myIndex22].name + ' ' + t('uno') + '!';
-    s.ts = Date.now();
-    db.ref('rooms22/' + roomCode22).set(s);
-  });
-}
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -4128,11 +3514,12 @@ input[type=text]::placeholder{
   z-index:15;
 }
 @keyframes glow{from{opacity:0.3;box-shadow:0 0 10px rgba(255,255,255,0.2);}to{opacity:0.9;box-shadow:0 0 25px rgba(255,255,255,0.5);}}
-.card.r.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-r);}
-.card.b.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-b);}
-.card.g.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-g);}
-.card.y.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-y);}
-.card.w.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), 0 0 30px rgba(255,255,255,0.6), 0 0 60px rgba(255,200,0,0.3);border-color:#fff;}
+.hand-scroll .card.playable{transform:translateY(-20px) scale(1.08) !important;z-index:50;}
+.card.r.playable,.hand-scroll .card.r.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-r);}
+.card.b.playable,.hand-scroll .card.b.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-b);}
+.card.g.playable,.hand-scroll .card.g.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-g);}
+.card.y.playable,.hand-scroll .card.y.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), var(--glow-y);}
+.card.w.playable,.hand-scroll .card.w.playable{box-shadow:0 12px 30px rgba(0,0,0,0.5), 0 0 30px rgba(255,255,255,0.6), 0 0 60px rgba(255,200,0,0.3);border-color:#fff;}
 
 .card:active{transform:translateY(-4px) scale(0.97);}
 .card.not-playable{opacity:0.35;cursor:default;filter:grayscale(0.3);}
@@ -4526,43 +3913,43 @@ body.theme-cyber{
 .ref-stats{font-size:12px;color:rgba(255,255,255,0.5);margin-top:6px;}
 
 /* 4 Players Mode */
-.game-table-4{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:8px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;}
+.game-table-4{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:4px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;transform:scale(0.85);transform-origin:center center;}
 .player-top{grid-column:2;grid-row:1;text-align:center;}
 .player-left{grid-column:1;grid-row:2;display:flex;flex-direction:column;align-items:center;}
 .player-right{grid-column:3;grid-row:2;display:flex;flex-direction:column;align-items:center;}
 .player-bottom{grid-column:1/4;grid-row:3;width:100%;}
 .hand-h4{display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;}
 .hand-v4{display:flex;flex-direction:column;gap:3px;align-items:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;max-height:200px;}
-.card-back-v4{width:36px;height:54px;border-radius:8px;background:#1a1a1a;border:1px solid #333;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.5);position:relative;overflow:hidden;}
+.card-back-v4{width:28px;height:42px;border-radius:6px;background:#1a1a1a;border:1px solid #333;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.5);position:relative;overflow:hidden;}
 .card-back-v4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
 .card-back-v4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:8px;color:#ffcc00;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,0.5);border:1px solid #ffcc00;padding:1px 3px;border-radius:2px;}
-.player-name-4{font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;font-weight:600;white-space:nowrap;}
-.player-avatar-4{font-size:20px;margin-bottom:2px;}
-.player-cards-4{font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px;}
+.player-name-4{font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:2px;font-weight:600;white-space:nowrap;}
+.player-avatar-4{font-size:16px;margin-bottom:1px;}
+.player-cards-4{font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px;}
 .player-active .player-name-4{color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.5);}
 .player-active .player-avatar-4{animation:turnPulse 1.5s infinite;}
 @keyframes turnPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.15);}}
 .center-4{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:center;gap:10px;}
-.draw-pile-4{width:48px;height:72px;border-radius:10px;background:#1a1a1a;border:1px solid #333;cursor:pointer;box-shadow:0 2px 0 #1a1a1a,0 4px 0 #1a1a1a,0 6px 0 #1a1a1a,0 8px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:rgba(255,255,255,0.7);position:relative;overflow:hidden;transform:translateY(-3px);transition:all 0.2s;}
+.draw-pile-4{width:40px;height:60px;border-radius:8px;background:#1a1a1a;border:1px solid #333;cursor:pointer;box-shadow:0 2px 0 #1a1a1a,0 4px 0 #1a1a1a,0 6px 0 #1a1a1a,0 8px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:rgba(255,255,255,0.7);position:relative;overflow:hidden;transform:translateY(-3px);transition:all 0.2s;}
 .draw-pile-4:active{transform:translateY(0) scale(0.95);}
 .draw-pile-4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
 .draw-pile-4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:10px;color:#ffcc00;letter-spacing:1px;border:1px solid #ffcc00;padding:1px 4px;border-radius:2px;}
 .draw-pile-4.disabled{opacity:0.35;cursor:default;}
-.top-card-4{width:48px;height:72px;border-radius:10px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.5);overflow:hidden;animation:topFloat 3s ease-in-out infinite;}
+.top-card-4{width:40px;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.5);overflow:hidden;animation:topFloat 3s ease-in-out infinite;}
 .top-card-4.r{background:#ff4444;}.top-card-4.b{background:#2B7FD4;}.top-card-4.g{background:#27A55A;}.top-card-4.y{background:#F5B800;}.top-card-4.w{background:#111;border-color:#333;}
-.card-oval-4{width:32px;height:48px;border-radius:50%;background:#fff;position:absolute;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);transform:rotate(-12deg);z-index:2;}
-.card-center-4{font-family:'Nunito',sans-serif;font-weight:900;font-size:18px;text-align:center;line-height:1;transform:rotate(12deg);}
-.card-corner-4{position:absolute;font-family:'Nunito',sans-serif;font-weight:900;font-size:10px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;z-index:3;}
+.card-oval-4{width:26px;height:40px;border-radius:50%;background:#fff;position:absolute;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);transform:rotate(-12deg);z-index:2;}
+.card-center-4{font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;text-align:center;line-height:1;transform:rotate(12deg);}
+.card-corner-4{position:absolute;font-family:'Nunito',sans-serif;font-weight:900;font-size:8px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;border-radius:50%;z-index:3;}
 .card-corner-4.top-left{top:3px;left:3px;}
 .card-corner-4.bottom-right{bottom:3px;right:3px;transform:rotate(180deg);}
-.card-4{width:48px;height:72px;border-radius:10px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 4px 10px rgba(0,0,0,0.4);overflow:hidden;}
+.card-4{width:40px;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 4px 10px rgba(0,0,0,0.4);overflow:hidden;}
 .card-4::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.05) 40%,transparent 60%);pointer-events:none;z-index:10;border-radius:10px;}
 .card-4.r{background:#ff4444;}.card-4.b{background:#2B7FD4;}.card-4.g{background:#27A55A;}.card-4.y{background:#F5B800;}.card-4.w{background:#111;border-color:#333;}
 .card-4.playable{transform:translateY(-8px) scale(1.05);z-index:10;}
 .card-4.playable::before{content:'';position:absolute;inset:-2px;border-radius:12px;border:2px solid rgba(255,255,255,0.8);opacity:0.6;animation:glow 1.2s infinite alternate;pointer-events:none;z-index:15;}
 .card-4.not-playable{opacity:0.35;cursor:default;filter:grayscale(0.3);}
 .card-4:active{transform:translateY(-2px) scale(0.97);}
-.hand-scroll-4{display:flex;gap:3px;overflow-x:auto;padding:16px 8px 24px;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:center;align-items:flex-end;min-height:100px;position:relative;perspective:600px;}
+.hand-scroll-4{display:flex;gap:2px;overflow-x:auto;padding:10px 6px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:center;align-items:flex-end;min-height:80px;position:relative;perspective:600px;}
 .hand-scroll-4::-webkit-scrollbar{display:none;}
 .hand-scroll-4 .card-4{transform-origin:bottom center;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);margin-bottom:0;}
 .hand-scroll-4 .card-4:nth-child(1){transform:rotate(-12deg) translateY(8px);}
@@ -4576,21 +3963,20 @@ body.theme-cyber{
 .hand-scroll-4 .card-4:nth-child(9){transform:rotate(12deg) translateY(8px);}
 .hand-scroll-4 .card-4.playable:hover,.hand-scroll-4 .card-4.playable:active{transform:translateY(-18px) scale(1.1) !important;z-index:100;}
 
-/* 2v2 Team Mode */
-.game-table-22{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:8px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;}
-.team-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:4px;}
-.team-red{background:rgba(232,59,59,0.3);color:#ff6b6b;}
-.team-blue{background:rgba(43,127,212,0.3);color:#6bb6ff;}
-.team-partner{font-size:10px;color:#27A55A;font-weight:700;margin-top:2px;}
-.partner-btn{padding:6px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#27A55A,#1e8c4a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;margin-left:4px;}
-.partner-btn:active{transform:scale(0.95);}
-.partner-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:default;}
-.team-win-popup{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:200;flex-direction:column;gap:16px;text-align:center;padding:20px;backdrop-filter:blur(5px);}
-.team-win-popup.show{display:flex;}
-.team-win-title{font-family:'Nunito',sans-serif;font-size:32px;font-weight:900;color:#27A55A;text-shadow:0 0 30px rgba(39,165,90,0.5);}
-.team-win-sub{font-size:16px;color:rgba(255,255,255,0.7);}
-.team-win-players{display:flex;gap:16px;margin:12px 0;}
-.team-win-avatar{font-size:48px;}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 </style>
 <base target="_blank">
 <base target="_blank">
@@ -4651,12 +4037,7 @@ body.theme-cyber{
     <div class="room-hint" id="four-hint">Классический UNO за одним столом</div>
     <button class="btn btn-purple" id="four-btn">Создать стол на 4</button>
   </div>
-  <div class="or-divider">— или —</div>
-  <div class="lobby-card">
-    <h3 id="team-title">🤝 2 на 2</h3>
-    <div class="room-hint" id="team-hint">Командный режим: Красные + Синие vs Зелёные + Жёлтые</div>
-    <button class="btn btn-green" id="team-btn">Играть 2 на 2</button>
-  </div>
+
   <div class="or-divider">— или —</div>
   <div class="lobby-card">
     <h3 id="bot-title">🤖 Играть с ботом</h3>
@@ -4781,66 +4162,7 @@ body.theme-cyber{
   </div>
 </div>
 
-<!-- GAME 2v2 -->
-<div id="game22-screen" class="screen">
-  <div class="top-bar">
-    <div class="game-btns">
-      <button class="icon-btn" id="lb-btn-22">🏆</button>
-      <button class="icon-btn" id="hist-btn-22">📜</button>
-      <button class="ach-btn" id="ach-btn-22">🏅</button>
-    </div>
-    <div class="turn-badge" id="turn-badge-22">Ваш ход</div>
-    <div class="score-badge" id="score-badge-22">2 на 2</div>
-  </div>
-  <div class="timer-wrap"><div class="timer-bar" id="timer-bar-22"></div></div>
 
-  <div class="game-table-22">
-    <div class="player-top" id="player-top-22">
-      <div class="player-avatar-4" id="top-avatar-22">🤖</div>
-      <div class="player-name-4" id="top-name-22">Бот <span class="team-badge team-blue">СИН</span></div>
-      <div class="hand-h4" id="top-hand-22"></div>
-      <div class="player-cards-4" id="top-cards-22">7 карт</div>
-    </div>
-    <div class="player-left" id="player-left-22">
-      <div class="player-avatar-4" id="left-avatar-22">🤖</div>
-      <div class="player-name-4" id="left-name-22">Бот <span class="team-badge team-red">КРС</span></div>
-      <div class="hand-v4" id="left-hand-22"></div>
-      <div class="player-cards-4" id="left-cards-22">7 карт</div>
-    </div>
-    <div class="center-4">
-      <div class="color-indicator" id="color-dot-22" style="width:36px;height:36px;"></div>
-      <div class="top-card-4" id="top-card-22"></div>
-      <div class="draw-pile-4" id="draw-btn-22">ВЗЯТЬ</div>
-      <div class="status-msg" id="status-msg-22"></div>
-      <button class="uno-btn" id="uno-btn-22">UNO!</button>
-    </div>
-    <div class="player-right" id="player-right-22">
-      <div class="player-avatar-4" id="right-avatar-22">🤖</div>
-      <div class="player-name-4" id="right-name-22">Бот <span class="team-badge team-blue">СИН</span></div>
-      <div class="hand-v4" id="right-hand-22"></div>
-      <div class="player-cards-4" id="right-cards-22">7 карт</div>
-    </div>
-    <div class="player-bottom" id="player-bottom-22">
-      <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px;">
-        <div class="hand-label" id="hand-label-22">Ваши карты</div>
-        <button class="partner-btn" id="partner-btn-22" style="display:none;">↗️ Партнёру</button>
-      </div>
-      <div class="hand-scroll-4" id="player-hand-22"></div>
-      <div class="team-partner" id="partner-hint-22" style="display:none;">Ваш партнёр слева — можете подкинуть ему карту!</div>
-    </div>
-  </div>
-</div>
-
-<!-- Team Win Popup -->
-<div class="team-win-popup" id="team-win-popup">
-  <div class="team-win-title">🏆 Победа команды!</div>
-  <div class="team-win-sub" id="team-win-sub">Красные + Синие победили!</div>
-  <div class="team-win-players" id="team-win-players">
-    <div class="team-win-avatar">🦁</div>
-    <div class="team-win-avatar">🐯</div>
-  </div>
-  <button class="btn btn-yellow" onclick="backToLobby();">🏠 В лобби</button>
-</div>
 
 <!-- END -->
 <div id="end-screen" class="screen">
