@@ -34,6 +34,12 @@ const db = firebase.database();
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
+// ── Sanitize ──
+function sanitize(str) {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 // ── i18n ──
 const i18n = {
   ru: {
@@ -757,12 +763,12 @@ function updateWaitingUI(state) {
   el.innerHTML = '';
   const p1 = document.createElement('div');
   p1.className = 'player-item';
-  p1.innerHTML = `<div class="player-dot"></div><span>${state.host?.name || t('host')} (${t('host')})</span>`;
+  p1.innerHTML = `<div class="player-dot"></div><span>${sanitize(state.host?.name) || t('host')} (${t('host')})</span>`;
   el.appendChild(p1);
   const p2 = document.createElement('div');
   p2.className = 'player-item';
   if (state.guest?.name) {
-    p2.innerHTML = `<div class="player-dot"></div><span>${state.guest.name}</span>`;
+    p2.innerHTML = `<div class="player-dot"></div><span>${sanitize(state.guest.name)}</span>`;
   } else {
     p2.innerHTML = `<div class="player-dot waiting"></div><span>${t('waitingFriend')}</span>`;
   }
@@ -843,7 +849,7 @@ function renderGame(state) {
   sorted.forEach((card, sortIdx) => {
     const realIdx = myHand.findIndex(c => c.c === card.c && c.v === card.v);
     const div = document.createElement('div');
-    const playable = isMyTurn && canPlay(card, topCard, cc, state.drawStack);
+    const playable = isMyTurn && canPlay(card, topCard, cc, state.drawStack, myHand);
     const inv = getInventory();
   const hasGold = inv.equipped.cardstyle === 'cd_gold';
   div.className = 'card ' + card.c + (playable ? ' playable' : ' not-playable') + (hasGold ? ' golden' : '');
@@ -894,12 +900,18 @@ function cardHTML(card) {
   `;
 }
 
-function canPlay(card, top, cc, drawStack) {
+function canPlay(card, top, cc, drawStack, hand) {
   if (drawStack > 0) {
     // Stack must be answered with same type: +2 on +2, wild4 on wild4
     return card.v === top.v;
   }
-  if (card.v === 'wild' || card.v === 'wild4') return true;
+  if (card.v === 'wild') return true;
+  if (card.v === 'wild4') {
+    // Official rule: can only play if no cards of current color
+    if (!hand || hand.length === 0) return true;
+    const hasColor = hand.some(c => c.c === cc && c.c !== 'w');
+    return !hasColor;
+  }
   if (top.c === 'w') return card.c === cc;
   if (card.c === cc) return true;
   if (card.c === top.c) return true;
@@ -917,7 +929,7 @@ function playCard(idx) {
     const card = state[me].hand[idx];
     if (!card) { playSound('error'); return; }
     const top = state.discard[state.discard.length-1];
-    if (!canPlay(card, top, state.currentColor, state.drawStack)) { playSound('error'); return; }
+    if (!canPlay(card, top, state.currentColor, state.drawStack, state[me].hand)) { playSound('error'); return; }
 
     playSound('play');
     state[me].hand.splice(idx, 1);
@@ -1348,6 +1360,7 @@ function renderPlayers(players) {
 
 function invitePlayer(playerId, playerName) {
   if (!myProfile.name) return;
+  if (playerId === myPlayerId) { showToast(lang === 'ru' ? 'Нельзя пригласить себя!' : 'Cannot invite yourself!', 'warning'); return; }
   const inviteCode = genCode();
   db.ref('invites/' + playerId).set({
     from: myProfile.name,
@@ -2271,7 +2284,7 @@ function renderMyHand4(sorted, originalHand, topCard, cc, drawStack, isMyTurn) {
   sorted.forEach((card, sortIdx) => {
     const realIdx = originalHand.findIndex(c => c.c === card.c && c.v === card.v);
     const div = document.createElement('div');
-    const playable = isMyTurn && canPlay(card, topCard, cc, drawStack);
+    const playable = isMyTurn && canPlay(card, topCard, cc, drawStack, originalHand);
     div.className = 'card-4 ' + card.c + (playable ? ' playable' : ' not-playable');
     div.innerHTML = cardHTML4(card);
     if (playable) div.onclick = () => playCard4(realIdx >= 0 ? realIdx : sortIdx);
@@ -2299,7 +2312,7 @@ function playCard4(idx) {
     const card = me.hand[idx];
     if (!card) { playSound('error'); return; }
     const top = state.discard[state.discard.length-1];
-    if (!canPlay(card, top, state.currentColor, state.drawStack)) { playSound('error'); return; }
+    if (!canPlay(card, top, state.currentColor, state.drawStack, state[me].hand)) { playSound('error'); return; }
 
     playSound('play');
     me.hand.splice(idx, 1);
@@ -2369,8 +2382,7 @@ function nextPlayer4(state) {
 
 function applyEffect4(state, card) {
   if (card.v === 'skip') {
-    // Skip next player: move 2 steps
-    state.currentPlayer = nextPlayer4(state);
+    // Skip next player: move 1 step (skip the next player)
     state.currentPlayer = nextPlayer4(state);
     state.lastAction = state.players[state.currentPlayer].name + ' ' + t('skip');
     shakeScreen();
