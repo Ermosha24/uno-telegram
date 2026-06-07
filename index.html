@@ -344,7 +344,7 @@ function renderLB() {
   lb.forEach((p,i)=>{
     const row = document.createElement('div');
     row.className = 'lb-row';
-    row.innerHTML = `<span>${medals[i]||''} ${p.name}</span><span>${p.xp} XP</span>`;
+    row.innerHTML = `<span>${medals[i]||''} ${sanitize(p.name)}</span><span>${p.xp} XP</span>`;
     el.appendChild(row);
   });
   if (lb.length === 0) el.innerHTML = '<div style="text-align:center;opacity:0.5;padding:20px;">No data yet</div>';
@@ -484,102 +484,6 @@ function botChooseColor(hand) {
   return best;
 }
 
-function botMove(state) {
-  if (!state || state.turn !== 'guest' || state.phase !== 'playing') return;
-  if (botTimer) clearTimeout(botTimer);
-
-  const delay = 1000 + Math.random() * 1500;
-  botTimer = setTimeout(() => {
-    db.ref('rooms/'+roomCode).once('value').then(snap => {
-      const s = snap.val();
-      if (!s || s.turn !== 'guest' || s.phase !== 'playing') return;
-
-      const botHand = s.guest.hand || [];
-      const top = s.discard[s.discard.length-1];
-      const cc = s.currentColor;
-
-      const playable = [];
-      botHand.forEach((card, idx) => {
-        if (canPlay(card, top, cc, s.drawStack)) playable.push({card, idx});
-      });
-
-      if (playable.length > 0) {
-        let pick = null;
-        if (s.drawStack > 0) {
-          pick = playable.find(({card}) => card.v === '+2') || playable.find(({card}) => card.v === 'wild4');
-        }
-        if (!pick) pick = playable.find(({card}) => card.v === '+2');
-        if (!pick) pick = playable.find(({card}) => card.v === 'skip');
-        if (!pick) pick = playable.find(({card}) => card.v === 'rev');
-        if (!pick) pick = playable.find(({card}) => card.v === 'wild4');
-        if (!pick) pick = playable.find(({card}) => card.v === 'wild');
-        if (!pick) pick = playable[Math.floor(Math.random() * playable.length)];
-
-        const card = pick.card;
-        const idx = pick.idx;
-        s.guest.hand.splice(idx, 1);
-        s.discard.push(card);
-        s.ts = Date.now();
-
-        if (card.v === 'wild' || card.v === 'wild4') {
-          s.currentColor = botChooseColor(s.guest.hand);
-          if (card.v === 'wild4') s.drawStack += 4;
-        } else {
-          if (card.c !== 'w') s.currentColor = card.c;
-        }
-
-        if (card.v === 'skip') { s.lastAction = t('bot') + ' ' + t('skip'); s.turn = 'guest'; shakeScreen(); }
-        else if (card.v === 'rev') { s.lastAction = t('reverse'); s.turn = 'guest'; }
-        else if (card.v === '+2') { s.drawStack += 2; s.turn = 'host'; s.lastAction = t('plus2') + ' ' + t('host'); }
-        else if (card.v === 'wild4') { s.turn = 'host'; s.lastAction = t('plus4') + ' ' + t('host'); rainbowFlash(); }
-        else { s.turn = 'host'; s.lastAction = ''; }
-
-        if (s.guest.hand.length === 1 && Math.random() > 0.15) {
-          s.lastAction = t('bot') + ' ' + t('uno') + '!';
-        }
-
-        if (s.guest.hand.length === 0) {
-          s.phase = 'ended';
-          s.winner = 'guest';
-        }
-
-        saveRoom(s);
-      } else {
-        if (s.drawStack > 0) {
-          const count = s.drawStack;
-          for (let i=0;i<count;i++) {
-            if (s.deck.length === 0) reshuffleDeck(s);
-            s.guest.hand.push(s.deck.pop());
-          }
-          s.drawStack = 0;
-          s.lastAction = t('bot') + ' ' + t('tookCards') + ' +' + count;
-          s.turn = 'host';
-        } else {
-          if (s.deck.length === 0) reshuffleDeck(s);
-          const drawn = s.deck.pop();
-          s.guest.hand.push(drawn);
-          if (canPlay(drawn, top, cc, 0)) {
-            if (Math.random() > 0.3) {
-              s.guest.hand.pop();
-              s.discard.push(drawn);
-              if (drawn.c !== 'w') s.currentColor = drawn.c;
-              s.turn = 'host';
-              s.lastAction = t('bot') + ' ' + t('drawOne');
-            } else {
-              s.turn = 'host';
-              s.lastAction = t('bot') + ' ' + t('drawOne');
-            }
-          } else {
-            s.turn = 'host';
-            s.lastAction = t('bot') + ' ' + t('drawOne');
-          }
-        }
-        s.ts = Date.now();
-        saveRoom(s);
-      }
-    });
-  }, delay);
-}
 
 // ── Lobby ──
 function backToLobby() {
@@ -736,7 +640,7 @@ function joinGame() {
     localStorage.setItem('uno-saved-room', code);
 
     patchRoom(code, {
-      'guest/name': myName,
+      'guest/name': getPlayerName(),
       phase: 'playing',
       ts: Date.now()
     }).then(()=>{
@@ -889,7 +793,7 @@ function renderGame(state) {
 function cardHTML(card) {
   const label = card.v==='wild'?'':card.v==='wild4'?'+4':card.v==='skip'?'🚫':card.v==='rev'?'⇄':card.v;
   const isWild = card.c === 'w';
-  const cornerColor = isWild ? 'wild-corner' : card.c + '-corner';
+  const cornerColor = isWild ? 'w-corner' : card.c + '-corner';
 
   if (isWild) {
     return `
@@ -1034,7 +938,8 @@ function checkWin(state) {
   const me = myRole;
   // Track player moves for speed achievement
   if (!state._playerMoves) state._playerMoves = 0;
-  if (state.currentPlayer === me || (state.isBot && me === 'host')) state._playerMoves++;
+  const isMyTurn = state.currentPlayer === me || state.turn === me || (state.isBot && me === 'host');
+  if (isMyTurn) state._playerMoves++;
   if (state[me].hand.length === 0) {
     // Track used wild BEFORE clearing hand for achievements
     state._usedWild = state[me].hand && state[me].hand.some(c => c.c === 'w');
@@ -1308,8 +1213,11 @@ if (!myPlayerId) {
 let playersRef = null;
 let playersUnsubscribe = null;
 
+let onlineInterval = null;
 function initOnlineStatus() {
   if (!myProfile.name) return;
+  // Clear previous interval to prevent leaks
+  if (onlineInterval) { clearInterval(onlineInterval); onlineInterval = null; }
   const playerRef = db.ref('players/' + myPlayerId);
   playerRef.set({
     name: myProfile.name,
@@ -1321,7 +1229,7 @@ function initOnlineStatus() {
     status: 'offline',
     lastSeen: firebase.database.ServerValue.TIMESTAMP
   });
-  setInterval(() => {
+  onlineInterval = setInterval(() => {
     if (document.visibilityState !== 'hidden') {
       playerRef.update({
         status: 'online',
@@ -1379,11 +1287,11 @@ function renderPlayers(players) {
     div.innerHTML = `
       <div class="player-avatar">${p.avatar || '🐸'}</div>
       <div class="player-info">
-        <div class="player-name">${p.name}</div>
+        <div class="player-name">${sanitize(p.name)}</div>
         <div class="player-meta">${statusText}</div>
       </div>
       <div class="player-status ${statusClass}"></div>
-      <button class="invite-btn" ${canInvite ? '' : 'disabled'} onclick="invitePlayer('${p.id}','${p.name}')">${lang === 'ru' ? 'Пригласить' : 'Invite'}</button>
+      <button class="invite-btn" ${canInvite ? '' : 'disabled'} onclick="invitePlayer('${sanitize(p.id)}','${sanitize(p.name)}')">${lang === 'ru' ? 'Пригласить' : 'Invite'}</button>
     `;
     list.appendChild(div);
   });
@@ -1617,7 +1525,7 @@ function botChooseColorSmart(hand, difficulty, topCard, currentColor) {
   return best;
 }
 
-function botMoveEnhanced(state) {
+function botMove(state) {
   if (!state || state.turn !== 'guest' || state.phase !== 'playing') return;
   if (botTimer) clearTimeout(botTimer);
 
@@ -1763,8 +1671,8 @@ function botMoveEnhanced(state) {
   }, delay);
 }
 
-// Override original botMove
-// botMove enhanced with difficulty support
+
+
 
 // Track quest progress hooks
 const originalCheckWin = checkWin;
@@ -2542,7 +2450,8 @@ function botMove4(state) {
       const s = snap.val();
       if (!s || s.currentPlayer !== botIdx || s.phase !== 'playing') return;
 
-      const botHand = s.players[botIdx].hand || [];
+      const botHand = s.players[botIdx].hand;
+      if (!botHand) { console.error('botMove4: no hand'); return; }
       const top = s.discard[s.discard.length-1];
       const cc = s.currentColor;
 
@@ -3445,12 +3354,12 @@ input[type=text]::placeholder{
 }
 @keyframes colorPulse {
   0%, 100% { box-shadow: 0 0 25px currentColor, 0 0 50px currentColor; }
+  50% { box-shadow: 0 0 35px currentColor, 0 0 70px currentColor; }
+}
+
 @keyframes turnPulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
   50% { transform: scale(1.15); filter: brightness(1.3); }
-}
-
-  50% { box-shadow: 0 0 35px currentColor, 0 0 70px currentColor; }
 }
 .color-indicator::after {
   content: '';
