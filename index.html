@@ -2267,13 +2267,10 @@ function renderGame4(state) {
 function renderHand4(hand, id, isBack, isVertical) {
   const el = document.getElementById(id);
   el.innerHTML = '';
-  const show = Math.min(hand.length, isVertical ? 8 : 10);
+  const show = Math.min(hand.length, isVertical ? 10 : 12);
   for (let i = 0; i < show; i++) {
     const d = document.createElement('div');
-    d.className = isVertical ? 'card-back-v4' : 'card-back';
-    if (!isVertical) {
-      d.style.marginLeft = i > 0 ? '-12px' : '0';
-    }
+    d.className = isVertical ? 'card-back-v4' : 'card-back-4';
     el.appendChild(d);
   }
 }
@@ -3925,70 +3922,410 @@ body.theme-cyber{
 .ref-stats{font-size:12px;color:rgba(255,255,255,0.5);margin-top:6px;}
 
 /* 4 Players Mode */
-.game-table-4{display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:auto 1fr auto;gap:4px;width:100%;max-width:500px;flex:1;align-items:center;justify-items:center;transform:scale(0.85);transform-origin:center center;}
-.player-top{grid-column:2;grid-row:1;text-align:center;}
-.player-left{grid-column:1;grid-row:2;display:flex;flex-direction:column;align-items:center;}
-.player-right{grid-column:3;grid-row:2;display:flex;flex-direction:column;align-items:center;}
-.player-bottom{grid-column:1/4;grid-row:3;width:100%;}
-.hand-h4{display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;}
-.hand-v4{display:flex;flex-direction:column;gap:3px;align-items:center;flex-wrap:nowrap;overflow:hidden;padding:4px 0;max-height:200px;}
-.card-back-v4{width:28px;height:42px;border-radius:6px;background:#1a1a1a;border:1px solid #333;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,0.5);position:relative;overflow:hidden;}
-.card-back-v4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
-.card-back-v4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:8px;color:#ffcc00;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,0.5);border:1px solid #ffcc00;padding:1px 3px;border-radius:2px;}
-.player-name-4{font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:2px;font-weight:600;white-space:nowrap;}
-.player-avatar-4{font-size:16px;margin-bottom:1px;}
-.player-cards-4{font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px;}
-.player-active .player-name-4{color:#F5B800;text-shadow:0 0 10px rgba(245,184,0,0.5);}
-.player-active .player-avatar-4{animation:turnPulse 1.5s infinite;}
-@keyframes turnPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.15);}}
-.center-4{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:center;gap:10px;}
-.draw-pile-4{width:40px;height:60px;border-radius:8px;background:#1a1a1a;border:1px solid #333;cursor:pointer;box-shadow:0 2px 0 #1a1a1a,0 4px 0 #1a1a1a,0 6px 0 #1a1a1a,0 8px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:rgba(255,255,255,0.7);position:relative;overflow:hidden;transform:translateY(-3px);transition:all 0.2s;}
-.draw-pile-4:active{transform:translateY(0) scale(0.95);}
-.draw-pile-4::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 45%,#cc0000 45%,#cc0000 55%,transparent 55%);}
-.draw-pile-4::after{content:'UNO';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Nunito',sans-serif;font-weight:900;font-size:10px;color:#ffcc00;letter-spacing:1px;border:1px solid #ffcc00;padding:1px 4px;border-radius:2px;}
-.draw-pile-4.disabled{opacity:0.35;cursor:default;}
-.top-card-4{width:40px;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.5);overflow:hidden;animation:topFloat 3s ease-in-out infinite;}
-.top-card-4.r{background:#ff4444;}.top-card-4.b{background:#2B7FD4;}.top-card-4.g{background:#27A55A;}.top-card-4.y{background:#F5B800;}.top-card-4.w{background:#111;border-color:#333;}
-.card-oval-4{width:26px;height:40px;border-radius:50%;background:#fff;position:absolute;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);transform:rotate(-12deg);z-index:2;}
-.card-center-4{font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;text-align:center;line-height:1;transform:rotate(12deg);}
-.card-corner-4{position:absolute;font-family:'Nunito',sans-serif;font-weight:900;font-size:8px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;border-radius:50%;z-index:3;}
-.card-corner-4.top-left{top:3px;left:3px;}
-.card-corner-4.bottom-right{bottom:3px;right:3px;transform:rotate(180deg);}
-.card-4{width:40px;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 4px 10px rgba(0,0,0,0.4);overflow:hidden;}
-.card-4::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.05) 40%,transparent 60%);pointer-events:none;z-index:10;border-radius:10px;}
-.card-4.r{background:#ff4444;}.card-4.b{background:#2B7FD4;}.card-4.g{background:#27A55A;}.card-4.y{background:#F5B800;}.card-4.w{background:#111;border-color:#333;}
-.card-4.playable{transform:translateY(-8px) scale(1.05);z-index:10;}
-.card-4.playable::before{content:'';position:absolute;inset:-2px;border-radius:12px;border:2px solid rgba(255,255,255,0.8);opacity:0.6;animation:glow 1.2s infinite alternate;pointer-events:none;z-index:15;}
-.card-4.not-playable{opacity:0.35;cursor:default;filter:grayscale(0.3);}
-.card-4:active{transform:translateY(-2px) scale(0.97);}
-.hand-scroll-4{display:flex;gap:2px;overflow-x:auto;padding:10px 6px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:center;align-items:flex-end;min-height:80px;position:relative;perspective:600px;}
-.hand-scroll-4::-webkit-scrollbar{display:none;}
-.hand-scroll-4 .card-4{transform-origin:bottom center;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);margin-bottom:0;}
-.hand-scroll-4 .card-4:nth-child(1){transform:rotate(-12deg) translateY(8px);}
-.hand-scroll-4 .card-4:nth-child(2){transform:rotate(-9deg) translateY(5px);}
-.hand-scroll-4 .card-4:nth-child(3){transform:rotate(-6deg) translateY(2px);}
-.hand-scroll-4 .card-4:nth-child(4){transform:rotate(-3deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(5){transform:rotate(0deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(6){transform:rotate(3deg) translateY(0px);}
-.hand-scroll-4 .card-4:nth-child(7){transform:rotate(6deg) translateY(2px);}
-.hand-scroll-4 .card-4:nth-child(8){transform:rotate(9deg) translateY(5px);}
-.hand-scroll-4 .card-4:nth-child(9){transform:rotate(12deg) translateY(8px);}
-.hand-scroll-4 .card-4.playable:hover,.hand-scroll-4 .card-4.playable:active{transform:translateY(-18px) scale(1.1) !important;z-index:100;}
+#game4-screen {
+  justify-content: flex-start;
+  padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  position: relative;
+  overflow: hidden;
+}
 
+.game-table-4 {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
 
+/* Players positioned around the table */
+.player-pos {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+}
 
+.player-top {
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+}
 
+.player-bottom {
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+}
 
+.player-left {
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
+.player-right {
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
+/* Center table */
+.center-4 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 1;
+}
 
+/* Player info */
+.player-name-4 {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 700;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.player-avatar-4 {
+  font-size: 22px;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.player-cards-4 {
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 2px;
+  font-weight: 600;
+}
+.player-active .player-name-4 {
+  color: #F5B800;
+  text-shadow: 0 0 12px rgba(245,184,0,0.6);
+}
+.player-active .player-avatar-4 {
+  animation: turnPulse 1.5s infinite;
+}
 
+/* Horizontal hands (top) */
+.hand-h4 {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  padding: 4px 0;
+}
 
+/* Vertical hands (left & right) */
+.hand-v4 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-height: 220px;
+  padding: 4px 0;
+}
 
+/* Card backs for 4-mode horizontal */
+.card-back-4 {
+  width: 32px;
+  height: 48px;
+  border-radius: 8px;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  flex-shrink: 0;
+  margin-left: -14px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+  position: relative;
+  overflow: hidden;
+}
+.card-back-4:first-child { margin-left: 0; }
+.card-back-4::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 45%, #cc0000 45%, #cc0000 55%, transparent 55%);
+}
+.card-back-4::after {
+  content: 'UNO';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%) rotate(-30deg);
+  font-family: 'Nunito',sans-serif;
+  font-weight: 900;
+  font-size: 10px;
+  color: #ffcc00;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  border: 1px solid #ffcc00;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
 
+/* Vertical card back */
+.card-back-v4 {
+  width: 28px;
+  height: 40px;
+  border-radius: 6px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  position: relative;
+  overflow: hidden;
+}
+.card-back-v4::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 45%, #cc0000 45%, #cc0000 55%, transparent 55%);
+}
+.card-back-v4::after {
+  content: 'UNO';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%) rotate(-30deg);
+  font-family: 'Nunito',sans-serif;
+  font-weight: 900;
+  font-size: 7px;
+  color: #ffcc00;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  border: 1px solid #ffcc00;
+  padding: 1px 2px;
+  border-radius: 2px;
+}
 
+/* Draw pile */
+.draw-pile-4 {
+  width: 48px;
+  height: 72px;
+  border-radius: 10px;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #1a1a1a, 0 4px 0 #1a1a1a, 0 6px 0 #1a1a1a, 0 8px 0 #1a1a1a, 0 10px 20px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.7);
+  position: relative;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: all 0.2s;
+}
+.draw-pile-4:active {
+  transform: translateY(0) scale(0.95);
+}
+.draw-pile-4::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 45%, #cc0000 45%, #cc0000 55%, transparent 55%);
+}
+.draw-pile-4::after {
+  content: 'UNO';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%) rotate(-30deg);
+  font-family: 'Nunito',sans-serif;
+  font-weight: 900;
+  font-size: 12px;
+  color: #ffcc00;
+  letter-spacing: 2px;
+  border: 2px solid #ffcc00;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.draw-pile-4.disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 
+/* Top card on table */
+.top-card-4 {
+  width: 52px;
+  height: 78px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  overflow: hidden;
+  animation: topFloat 3s ease-in-out infinite;
+}
+.top-card-4.r { background: #ff4444; }
+.top-card-4.b { background: #2B7FD4; }
+.top-card-4.g { background: #27A55A; }
+.top-card-4.y { background: #F5B800; }
+.top-card-4.w { background: #111; border-color: #333; }
 
+.card-oval-4 {
+  width: 32px;
+  height: 50px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transform: rotate(-12deg);
+  z-index: 2;
+}
+.card-center-4 {
+  font-family: 'Nunito',sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  text-align: center;
+  line-height: 1;
+  transform: rotate(12deg);
+}
+.card-corner-4 {
+  position: absolute;
+  font-family: 'Nunito',sans-serif;
+  font-weight: 900;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  z-index: 3;
+}
+.card-corner-4.top-left { top: 4px; left: 4px; }
+.card-corner-4.bottom-right { bottom: 4px; right: 4px; transform: rotate(180deg); }
+
+/* Player cards */
+.card-4 {
+  width: 48px;
+  height: 72px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.card-4::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 40%, transparent 60%);
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 10px;
+}
+.card-4.r { background: #ff4444; }
+.card-4.b { background: #2B7FD4; }
+.card-4.g { background: #27A55A; }
+.card-4.y { background: #F5B800; }
+.card-4.w { background: #111; border-color: #333; }
+
+.card-4.playable {
+  transform: translateY(-10px) scale(1.05);
+  z-index: 10;
+}
+.card-4.playable::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 13px;
+  border: 2px solid rgba(255,255,255,0.8);
+  opacity: 0.6;
+  animation: glow 1.2s infinite alternate;
+  pointer-events: none;
+  z-index: 15;
+}
+.card-4.not-playable {
+  opacity: 0.35;
+  cursor: default;
+  filter: grayscale(0.3);
+}
+.card-4:active {
+  transform: translateY(-3px) scale(0.97);
+}
+
+/* Hand scroll for bottom player */
+.hand-scroll-4 {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding: 16px 10px 24px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  justify-content: center;
+  align-items: flex-end;
+  min-height: 100px;
+  position: relative;
+  perspective: 600px;
+}
+.hand-scroll-4::-webkit-scrollbar { display: none; }
+
+.hand-scroll-4 .card-4 {
+  transform-origin: bottom center;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  margin-bottom: 0;
+}
+.hand-scroll-4 .card-4:nth-child(1) { transform: rotate(-14deg) translateY(10px); }
+.hand-scroll-4 .card-4:nth-child(2) { transform: rotate(-11deg) translateY(6px); }
+.hand-scroll-4 .card-4:nth-child(3) { transform: rotate(-8deg) translateY(3px); }
+.hand-scroll-4 .card-4:nth-child(4) { transform: rotate(-5deg) translateY(1px); }
+.hand-scroll-4 .card-4:nth-child(5) { transform: rotate(-2deg) translateY(0px); }
+.hand-scroll-4 .card-4:nth-child(6) { transform: rotate(2deg) translateY(0px); }
+.hand-scroll-4 .card-4:nth-child(7) { transform: rotate(5deg) translateY(1px); }
+.hand-scroll-4 .card-4:nth-child(8) { transform: rotate(8deg) translateY(3px); }
+.hand-scroll-4 .card-4:nth-child(9) { transform: rotate(11deg) translateY(6px); }
+.hand-scroll-4 .card-4:nth-child(10) { transform: rotate(14deg) translateY(10px); }
+.hand-scroll-4 .card-4:nth-child(11) { transform: rotate(17deg) translateY(15px); }
+.hand-scroll-4 .card-4:nth-child(12) { transform: rotate(20deg) translateY(22px); }
+
+.hand-scroll-4 .card-4.playable:hover,
+.hand-scroll-4 .card-4.playable:active {
+  transform: translateY(-20px) scale(1.12) !important;
+  z-index: 100;
+}
+
+/* Small screen adjustments */
+@media (max-width: 380px) {
+  .card-4 { width: 40px; height: 60px; }
+  .card-oval-4 { width: 26px; height: 40px; }
+  .card-center-4 { font-size: 14px; }
+  .top-card-4 { width: 44px; height: 66px; }
+  .draw-pile-4 { width: 40px; height: 60px; }
+  .card-back-4 { width: 26px; height: 40px; margin-left: -10px; }
+  .card-back-v4 { width: 22px; height: 34px; }
+  .hand-v4 { max-height: 160px; }
+  .player-name-4 { font-size: 9px; }
+  .player-avatar-4 { font-size: 18px; }
+  .center-4 { gap: 6px; }
+}
+
+@media (max-height: 700px) {
+  .hand-v4 { max-height: 160px; }
+  .card-back-v4 { width: 22px; height: 32px; }
+  .player-avatar-4 { font-size: 18px; }
+}
 </style>
 <base target="_blank">
 <base target="_blank">
@@ -4142,13 +4479,13 @@ body.theme-cyber{
   <div class="timer-wrap"><div class="timer-bar" id="timer-bar-4"></div></div>
 
   <div class="game-table-4">
-    <div class="player-top" id="player-top-4">
+    <div class="player-top player-pos" id="player-top-4">
       <div class="player-avatar-4" id="top-avatar-4">🤖</div>
       <div class="player-name-4" id="top-name-4">Бот</div>
       <div class="hand-h4" id="top-hand-4"></div>
       <div class="player-cards-4" id="top-cards-4">7 карт</div>
     </div>
-    <div class="player-left" id="player-left-4">
+    <div class="player-left player-pos" id="player-left-4">
       <div class="player-avatar-4" id="left-avatar-4">🤖</div>
       <div class="player-name-4" id="left-name-4">Бот</div>
       <div class="hand-v4" id="left-hand-4"></div>
@@ -4161,13 +4498,13 @@ body.theme-cyber{
       <div class="status-msg" id="status-msg-4"></div>
       <button class="uno-btn" id="uno-btn-4">UNO!</button>
     </div>
-    <div class="player-right" id="player-right-4">
+    <div class="player-right player-pos" id="player-right-4">
       <div class="player-avatar-4" id="right-avatar-4">🤖</div>
       <div class="player-name-4" id="right-name-4">Бот</div>
       <div class="hand-v4" id="right-hand-4"></div>
       <div class="player-cards-4" id="right-cards-4">7 карт</div>
     </div>
-    <div class="player-bottom" id="player-bottom-4">
+    <div class="player-bottom player-pos" id="player-bottom-4">
       <div class="hand-label" id="hand-label-4">Ваши карты</div>
       <div class="hand-scroll-4" id="player-hand-4"></div>
     </div>
