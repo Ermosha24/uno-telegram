@@ -115,7 +115,7 @@ function updateProfileUI() {
   const coinsEl = document.getElementById('prof-coins');
   const eqAv = getEquippedAvatar();
   if (avEl) avEl.textContent = eqAv || myProfile.avatar || '🐸';
-  if (nmEl) nmEl.textContent = myProfile.name || (lang==='ru'?'Игрок':'Player');
+  if (nmEl) nmEl.textContent = sanitize(myProfile.name || getPlayerName());
   if (coinsEl) coinsEl.textContent = myProfile.coins || 0;
 }
 function selAv(el) {
@@ -404,8 +404,11 @@ function stopTimer() {
   timerInterval = null;
 }
 function autoPass() {
-  if (!roomCode || !myRole) return;
-  drawCard();
+  if (roomCode4) {
+    drawCard4();
+  } else if (roomCode && myRole) {
+    drawCard();
+  }
 }
 
 // ── Animations ──
@@ -587,7 +590,7 @@ function backToLobby() {
   if (unsub4) { try { unsub4(); } catch(e) {} unsub4 = null; }
   stopTimer();
   stopTimer4();
-  stopTimer22();
+  
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
   roomCode = null; roomCode4 = null; myRole = null; myIndex4 = -1; pendingWild = null; pendingWild4 = null; isBotGame = false; is4Mode = false;
@@ -635,7 +638,7 @@ function hostGame() {
 
   const state = {
     code, phase:'waiting',
-    host: {hand:hostHand, name: myName},
+    host: {hand:hostHand, name: getPlayerName()},
     guest: {hand:guestHand, name:null},
     deck, discard:[top],
     currentColor: top.c,
@@ -685,7 +688,7 @@ function startBotGame() {
 
   const state = {
     code, phase:'playing',
-    host: {hand:hostHand, name: myName},
+    host: {hand:hostHand, name: getPlayerName()},
     guest: {hand:botHand, name: t('bot')},
     deck, discard:[top],
     currentColor: top.c,
@@ -917,7 +920,7 @@ function canPlay(card, top, cc, drawStack, hand) {
   if (card.v === 'wild4') {
     // Official rule: can only play if no cards of current color
     if (!hand || hand.length === 0) return true;
-    const hasColor = hand.some(c => c.c === cc && c.c !== 'w');
+    const hasColor = hand.some(c => c.c === cc);
     return !hasColor;
   }
   if (top.c === 'w') return card.c === cc;
@@ -1019,13 +1022,19 @@ function applyEffect(state, card) {
 
 function reshuffleDeck(state) {
   const top = state.discard.pop();
+  // Preserve active drawStack cards - don't reshuffle them back
+  const activePenalty = state.drawStack || 0;
+  const penaltyCards = activePenalty > 0 ? state.discard.splice(-activePenalty) : [];
   state.deck = shuffle(state.discard);
-  state.discard = [top];
+  state.discard = [top].concat(penaltyCards);
   showToast('Deck reshuffled!', 'info');
 }
 
 function checkWin(state) {
   const me = myRole;
+  // Track player moves for speed achievement
+  if (!state._playerMoves) state._playerMoves = 0;
+  if (state.currentPlayer === me || (state.isBot && me === 'host')) state._playerMoves++;
   if (state[me].hand.length === 0) {
     // Track used wild BEFORE clearing hand for achievements
     state._usedWild = state[me].hand && state[me].hand.some(c => c.c === 'w');
@@ -1066,6 +1075,7 @@ function missedUno() {
 
 function showEnd(state) {
   if (!state) { 
+    isEndScreenShown = false;
     backToLobby(); 
     return; 
   }
@@ -1076,7 +1086,7 @@ function showEnd(state) {
 
   stopTimer();
   stopTimer4();
-  stopTimer22();
+  
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
 
   const won = state.winner === myRole;
@@ -1112,10 +1122,12 @@ function showEnd(state) {
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
 
-  if (won) { addXP(100); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
+  if (won) { addXP(100); saveLB({name: sanitize(myProfile.name || getPlayerName()), xp: myProfile.xp}); }
   else { addXP(10); }
 
   // Auto return to lobby after 3 seconds
+    checkFreeCoins();
+
   setTimeout(() => {
     isEndScreenShown = false;
     backToLobby();
@@ -1137,6 +1149,7 @@ function toggleHistory() {
 
 // ── Init ──
 const myName = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) ? tg.initDataUnsafe.user.first_name : (lang==='ru'?'Игрок':'Player');
+function getPlayerName() { return (myProfile && myProfile.name) || myName; }
 
 document.addEventListener('DOMContentLoaded', () => {
   // Синхронная инициализация UI (async обновит позже при необходимости)
@@ -1178,9 +1191,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hist-btn').addEventListener('click', toggleHistory);
 
   document.querySelectorAll('[data-back]').forEach(btn => btn.addEventListener('click', backToLobby));
-  document.querySelectorAll('[data-color]').forEach(btn => {
-    btn.addEventListener('click', () => pickColor(btn.dataset.color));
-  });
   document.querySelectorAll('[data-chat]').forEach(btn => {
     btn.addEventListener('click', () => sendChat(btn.dataset.chat));
   });
@@ -1754,34 +1764,38 @@ function botMoveEnhanced(state) {
 }
 
 // Override original botMove
-const originalBotMove = botMove;
-botMove = botMoveEnhanced;
+// botMove enhanced with difficulty support
 
 // Track quest progress hooks
 const originalCheckWin = checkWin;
 checkWin = function(state) {
   const me = myRole;
+  if (!state[me] || !state[me].hand) return false;
   const won = state[me].hand.length === 0;
   if (won) {
     // Track used wild BEFORE hand is cleared
-    state._usedWild = state[me] && state[me].hand && state[me].hand.some(c => c.c === 'w');
+    state._usedWild = state[me].hand.some(c => c.c === 'w');
     state.phase = 'ended';
     state.winner = myRole;
 
-    // Update profile wins and XP
-    myProfile.wins = (myProfile.wins || 0) + 1;
-    myProfile.xp = (myProfile.xp || 0) + 100;
-    localStorage.setItem('uno-profile', JSON.stringify(myProfile));
-    updateProfileUI();
+    // Update profile wins and XP only for real player (not bot)
+    const isRealPlayerWin = !state.isBot || myRole === 'host';
+    if (isRealPlayerWin) {
+      myProfile.wins = (myProfile.wins || 0) + 1;
+      myProfile.xp = (myProfile.xp || 0) + 100;
+      localStorage.setItem('uno-profile', JSON.stringify(myProfile));
+      updateProfileUI();
+    }
 
     playSound('win');
     confetti();
 
     // Quest tracking
     updateQuestProgress('games');
-    if (isBotGame) updateQuestProgress('botWins');
+    if (typeof isBotGame !== 'undefined' && isBotGame) updateQuestProgress('botWins');
 
-    const turns = state.discard ? state.discard.length : 0;
+    // Use _playerMoves for accurate turn count (BUG 15 fix)
+    const turns = state._playerMoves || (state.discard ? state.discard.length : 0);
     if (turns <= 8) updateQuestProgress('fastWins');
 
     // Track same color quest (check played cards)
@@ -1793,7 +1807,9 @@ checkWin = function(state) {
     // Track +4 plays
     const plus4Count = state.discard.filter(c => c.v === 'wild4').length;
     if (plus4Count >= 2) updateQuestProgress('plus4Plays', plus4Count);
+    return true;
   }
+  return false;
 };
 
 // Init
@@ -1832,7 +1848,7 @@ const SHOP_ITEMS = {
 };
 
 function getInventory() {
-  return JSON.parse(localStorage.getItem('uno-inventory') || '{"avatars":[],"themes":["th_dark"],"cardstyles":[],"equipped":{"avatar":null,"theme":"th_dark","cardstyle":null}}');
+  return JSON.parse(localStorage.getItem('uno-inventory') || '{"avatars":[],"themes":[],"cardstyles":[],"equipped":{"avatar":null,"theme":null,"cardstyle":null}}');
 }
 function saveInventory(inv) {
   localStorage.setItem('uno-inventory', JSON.stringify(inv));
@@ -2393,13 +2409,14 @@ function drawCard4() {
       me.hand.push(drawn);
       const top = state.discard[state.discard.length-1];
       if (canPlay(drawn, top, state.currentColor, 0)) {
+        state._drewPlayable = true;
         state.lastAction = (lang==='ru'?'Взяли — можно сыграть!':'Drew — you may play!');
       } else {
+        state._drewPlayable = false;
         state.lastAction = t('drawOne');
-        state.currentPlayer = nextPlayer4(state);
       }
     }
-    if (!state.lastAction.includes('можно сыграть') && !state.lastAction.includes('you may play')) {
+    if (!state._drewPlayable) {
       state.currentPlayer = nextPlayer4(state);
     }
     state.ts = Date.now();
@@ -2467,7 +2484,7 @@ function showEnd4(state) {
 
   stopTimer();
   stopTimer4();
-  stopTimer22();
+  
 
   const won = state.winner === myIndex4;
 
@@ -2498,7 +2515,7 @@ function showEnd4(state) {
   showScreen('end');
   localStorage.removeItem('uno-saved-room');
   savedRoom = null;
-  if (won) { addXP(150); saveLB({name: myProfile.name || myName, xp: myProfile.xp}); }
+  if (won) { addXP(150); saveLB({name: sanitize(myProfile.name || getPlayerName()), xp: myProfile.xp}); }
   else { addXP(10); }
 
   const turns = state.discard ? state.discard.length : 0;
@@ -2572,12 +2589,13 @@ function botMove4(state) {
         db.ref('rooms4/' + roomCode4).set(s);
       } else {
         if (s.drawStack > 0) {
-          for (let i = 0; i < s.drawStack; i++) {
+          const drawCount = s.drawStack;
+          for (let i = 0; i < drawCount; i++) {
             if (s.deck.length === 0) reshuffleDeck4(s);
             botHand.push(s.deck.pop());
           }
           s.drawStack = 0;
-          s.lastAction = bot.name + ' ' + t('tookCards') + ' +' + s.drawStack;
+          s.lastAction = bot.name + ' ' + t('tookCards') + ' +' + drawCount;
         } else {
           if (s.deck.length === 0) reshuffleDeck4(s);
           botHand.push(s.deck.pop());
@@ -3427,6 +3445,11 @@ input[type=text]::placeholder{
 }
 @keyframes colorPulse {
   0%, 100% { box-shadow: 0 0 25px currentColor, 0 0 50px currentColor; }
+@keyframes turnPulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.15); filter: brightness(1.3); }
+}
+
   50% { box-shadow: 0 0 35px currentColor, 0 0 70px currentColor; }
 }
 .color-indicator::after {
