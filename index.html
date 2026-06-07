@@ -2659,6 +2659,47 @@ function callUno4() {
   --glow-g: 0 0 20px rgba(39,165,90,0.6), 0 0 40px rgba(39,165,90,0.3);
   --glow-y: 0 0 20px rgba(245,184,0,0.6), 0 0 40px rgba(245,184,0,0.3);
 }
+/* 1v1 mode card sizing */
+#game-screen {
+  --card-w: 56px;
+  --card-h: 84px;
+  --radius: 12px;
+}
+
+/* Small screens */
+@media (max-width: 380px) {
+  #game-screen {
+    --card-w: 48px;
+    --card-h: 72px;
+    --radius: 10px;
+  }
+  .card-back {
+    width: 38px !important;
+    height: 56px !important;
+  }
+  .draw-pile-btn {
+    width: 48px !important;
+    height: 72px !important;
+  }
+  .top-card {
+    width: 48px !important;
+    height: 72px !important;
+  }
+  .card-corner {
+    font-size: 11px !important;
+    width: 18px !important;
+    height: 18px !important;
+  }
+  .card-oval-real {
+    width: 36px !important;
+    height: 56px !important;
+  }
+  .card-center-real {
+    font-size: 22px !important;
+  }
+}
+
+
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 
@@ -3157,9 +3198,9 @@ input[type=text]::placeholder{
 /* Game */
 #game-screen {
   justify-content: flex-start;
-  padding: max(8px, env(safe-area-inset-top)) 12px max(8px, env(safe-area-inset-bottom));
+  padding: max(6px, env(safe-area-inset-top)) 10px max(6px, env(safe-area-inset-bottom));
   position: relative;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* Game table surface */
@@ -3171,12 +3212,15 @@ input[type=text]::placeholder{
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  background: radial-gradient(ellipse at 50% 50%, rgba(39, 165, 90, 0.12) 0%, rgba(15, 42, 26, 0.4) 70%, transparent 100%);
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 10px 8px;
-  margin: 4px 0;
-  backdrop-filter: blur(2px);
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(39, 165, 90, 0.15) 0%, rgba(15, 42, 26, 0.3) 60%, transparent 100%),
+    radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.2) 0%, transparent 70%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 6px;
+  margin: 2px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
 }
 
 .top-bar {
@@ -3184,23 +3228,24 @@ input[type=text]::placeholder{
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   position: relative;
   z-index: 5;
+  padding: 0 4px;
 }
 .game-btns {
   display: flex;
   gap: 6px;
 }
 .icon-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3215,12 +3260,13 @@ input[type=text]::placeholder{
 .turn-badge {
   font-family: 'Nunito', sans-serif;
   font-weight: 800;
-  font-size: 12px;
-  padding: 7px 16px;
-  border-radius: 24px;
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 20px;
   letter-spacing: 0.5px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   transition: all 0.3s;
+  white-space: nowrap;
 }
 .turn-badge.your-turn {
   background: linear-gradient(135deg, #27A55A, #1e8c4a);
@@ -3234,16 +3280,17 @@ input[type=text]::placeholder{
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .score-badge {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   font-weight: 600;
+  white-space: nowrap;
 }
 .timer-wrap {
   width: 100%;
-  height: 4px;
+  height: 3px;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  margin-bottom: 6px;
+  border-radius: 3px;
+  margin-bottom: 4px;
   overflow: hidden;
 }
 .timer-bar {
@@ -3251,7 +3298,7 @@ input[type=text]::placeholder{
   background: linear-gradient(90deg, #27A55A, #4ade80);
   width: 100%;
   transition: width 1s linear;
-  border-radius: 4px;
+  border-radius: 3px;
   box-shadow: 0 0 15px rgba(39, 165, 90, 0.4), 0 0 30px rgba(39, 165, 90, 0.2);
   position: relative;
   overflow: hidden;
@@ -3278,12 +3325,27 @@ input[type=text]::placeholder{
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-bottom: 2px;
+}
+.opp-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 4px;
 }
+.opp-avatar {
+  font-size: 22px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.opp-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
 .opponent-label {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   text-align: center;
   font-weight: 600;
   letter-spacing: 1px;
@@ -3294,21 +3356,21 @@ input[type=text]::placeholder{
   justify-content: center;
   flex-wrap: nowrap;
   overflow: hidden;
-  padding: 6px 0;
-  min-height: 70px;
+  padding: 4px 0;
+  min-height: 58px;
   align-items: flex-end;
 }
 
-/* REAL UNO CARD BACK */
+/* Card back for opponent - smaller */
 .card-back {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--radius);
+  width: 44px;
+  height: 66px;
+  border-radius: 10px;
   background: #1a1a1a;
   border: 2px solid #333;
   flex-shrink: 0;
-  margin-left: -20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  margin-left: -16px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
   position: relative;
   overflow: hidden;
   transition: transform 0.2s;
@@ -3333,13 +3395,13 @@ input[type=text]::placeholder{
   transform: translate(-50%, -50%) rotate(-30deg);
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 10px;
   color: #ffcc00;
   letter-spacing: 2px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   border: 2px solid #ffcc00;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 5px;
+  border-radius: 3px;
 }
 .card-back:first-child { margin-left: 0; }
 
@@ -3348,36 +3410,38 @@ input[type=text]::placeholder{
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
+  flex: 1;
+  justify-content: center;
 }
 .color-indicator {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.3);
   transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 0 30px currentColor, 0 0 60px currentColor;
+  box-shadow: 0 0 25px currentColor, 0 0 50px currentColor;
   position: relative;
   animation: colorPulse 2s ease-in-out infinite;
 }
 @keyframes colorPulse {
-  0%, 100% { box-shadow: 0 0 30px currentColor, 0 0 60px currentColor; }
-  50% { box-shadow: 0 0 40px currentColor, 0 0 80px currentColor; }
+  0%, 100% { box-shadow: 0 0 25px currentColor, 0 0 50px currentColor; }
+  50% { box-shadow: 0 0 35px currentColor, 0 0 70px currentColor; }
 }
 .color-indicator::after {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -5px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.1);
 }
 
-/* REAL UNO DRAW PILE */
+/* Draw pile */
 .draw-pile-btn {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--radius);
+  width: 56px;
+  height: 84px;
+  border-radius: 12px;
   background: #1a1a1a;
   border: 2px solid #333;
   cursor: pointer;
@@ -3392,14 +3456,14 @@ input[type=text]::placeholder{
   align-items: center;
   justify-content: center;
   font-family: 'Nunito', sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   color: rgba(255, 255, 255, 0.7);
   letter-spacing: 1px;
   transition: all 0.2s;
   position: relative;
   overflow: hidden;
-  transform: translateY(-5px);
+  transform: translateY(-4px);
 }
 .draw-pile-btn:active {
   transform: translateY(0);
@@ -3419,13 +3483,13 @@ input[type=text]::placeholder{
   transform: translate(-50%, -50%) rotate(-30deg);
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
   color: #ffcc00;
   letter-spacing: 2px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   border: 2px solid #ffcc00;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 5px;
+  border-radius: 3px;
 }
 .draw-pile-btn.disabled {
   opacity: 0.35;
@@ -3434,20 +3498,20 @@ input[type=text]::placeholder{
 }
 .pile-row {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   align-items: center;
 }
 .uno-btn {
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 22px;
-  padding: 10px 32px;
-  border-radius: 30px;
+  font-size: 20px;
+  padding: 8px 28px;
+  border-radius: 28px;
   border: none;
   background: linear-gradient(135deg, #F5B800, #e6a800);
   color: #0a0a1a;
   cursor: pointer;
-  box-shadow: 0 6px 0 #b38600, 0 8px 20px rgba(245, 184, 0, 0.3), 0 0 30px rgba(245, 184, 0, 0.2);
+  box-shadow: 0 5px 0 #b38600, 0 8px 20px rgba(245, 184, 0, 0.3), 0 0 30px rgba(245, 184, 0, 0.2);
   transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: none;
   letter-spacing: 1px;
@@ -3456,35 +3520,35 @@ input[type=text]::placeholder{
 .uno-btn.show { display: block; }
 .uno-btn.pulse { animation: unoPulse 0.8s infinite alternate; }
 @keyframes unoPulse {
-  from { transform: scale(1); box-shadow: 0 6px 0 #b38600, 0 8px 20px rgba(245, 184, 0, 0.3); }
-  to { transform: scale(1.08); box-shadow: 0 6px 0 #b38600, 0 12px 30px rgba(245, 184, 0, 0.5); }
+  from { transform: scale(1); box-shadow: 0 5px 0 #b38600, 0 8px 20px rgba(245, 184, 0, 0.3); }
+  to { transform: scale(1.08); box-shadow: 0 5px 0 #b38600, 0 12px 30px rgba(245, 184, 0, 0.5); }
 }
-.uno-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b38600, 0 4px 10px rgba(245, 184, 0, 0.3); }
+.uno-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b38600, 0 4px 10px rgba(245, 184, 0, 0.3); }
 .status-msg {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
-  min-height: 18px;
+  min-height: 16px;
   font-weight: 600;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 .hand-area {
   width: 100%;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .hand-label {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   text-align: center;
   font-weight: 600;
   letter-spacing: 0.5px;
 }
 .hand-scroll {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   overflow-x: auto;
-  padding: 16px 10px 28px;
+  padding: 12px 20px 28px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   justify-content: center;
@@ -3497,6 +3561,45 @@ input[type=text]::placeholder{
 
 /* Arc layout for cards in hand */
 .hand-scroll .card {
+  transform-origin: bottom center;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  margin-bottom: 0;
+}
+.hand-scroll .card:nth-child(1) { transform: rotate(-16deg) translateY(10px); }
+.hand-scroll .card:nth-child(2) { transform: rotate(-12deg) translateY(6px); }
+.hand-scroll .card:nth-child(3) { transform: rotate(-9deg) translateY(3px); }
+.hand-scroll .card:nth-child(4) { transform: rotate(-5deg) translateY(1px); }
+.hand-scroll .card:nth-child(5) { transform: rotate(-2deg) translateY(0px); }
+.hand-scroll .card:nth-child(6) { transform: rotate(2deg) translateY(0px); }
+.hand-scroll .card:nth-child(7) { transform: rotate(5deg) translateY(1px); }
+.hand-scroll .card:nth-child(8) { transform: rotate(9deg) translateY(3px); }
+.hand-scroll .card:nth-child(9) { transform: rotate(12deg) translateY(6px); }
+.hand-scroll .card:nth-child(10) { transform: rotate(16deg) translateY(10px); }
+.hand-scroll .card:nth-child(11) { transform: rotate(20deg) translateY(15px); }
+.hand-scroll .card:nth-child(12) { transform: rotate(24deg) translateY(22px); }
+.hand-scroll .card:nth-child(13) { transform: rotate(28deg) translateY(30px); }
+.hand-scroll .card:nth-child(14) { transform: rotate(32deg) translateY(40px); }
+
+/* Playable cards pop up more */
+.hand-scroll .card.playable { z-index: 20; }
+.hand-scroll .card.playable:hover,
+.hand-scroll .card.playable:active {
+  transform: translateY(-22px) scale(1.12) !important;
+  z-index: 100;
+}
+.swipe-hint {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.card.playable .swipe-hint { opacity: 1; }
+.card {
   transform-origin: bottom center;
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   margin-bottom: 0;
@@ -3819,8 +3922,8 @@ input[type=text]::placeholder{
 
 /* Top card (стол) */
 .top-card{
-  width:64px;
-  height:96px;
+  width:var(--card-w);
+  height:var(--card-h);
   border-radius:var(--radius);
   border:2px solid rgba(255,255,255,0.9);
   display:flex;
@@ -4730,9 +4833,9 @@ body.theme-cyber{
   <div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>
   <div class="game-table">
     <div class="opponent-area">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <span id="opp-avatar" style="font-size:22px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🤖</span>
-        <div style="display:flex;flex-direction:column;align-items:center;">
+      <div class="opp-info">
+        <span class="opp-avatar" id="opp-avatar">🤖</span>
+        <div class="opp-meta">
           <div class="opponent-label" id="opp-name">Соперник</div>
           <div class="opponent-label" id="opp-cards-count" style="font-size:10px;margin-top:1px;">7 карт</div>
         </div>
